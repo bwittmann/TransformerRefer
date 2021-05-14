@@ -3,4 +3,5 @@ outputs
 demo
 docs
 LICENSE
+__pycache__
 
