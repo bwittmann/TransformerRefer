@@ -32,15 +32,16 @@ class RefNet(nn.Module):
         self.no_reference = no_reference
 
 
-        # --------- PROPOSAL GENERATION ---------
-        # Backbone point feature learning
-        self.backbone_net = Pointnet2Backbone(input_feature_dim=self.input_feature_dim)
-
-        # Hough voting
-        self.vgen = VotingModule(self.vote_factor, 256)
-
-        # Vote aggregation and object proposal
-        self.proposal = ProposalModule(num_class, num_heading_bin, num_size_cluster, mean_size_arr, num_proposal, sampling)
+        # TODO: 
+        # 1. Add GroupFreeDetector
+        # 2. Add argparse arguments for detector
+        # 3. Check if all necessary files have been imported
+        # 4. Change dimensions of features/querry from [B, 288, 256] to [B, 128, 256]
+        #    is possible via a MLP.
+        # 5. Think about using a pre-trained detector. Maybe for first step pre-trained
+        #    VoteNet vs. pre-trained detector.
+        # 6. Make eval work first and then train.
+        
 
         if not no_reference:
             # --------- LANGUAGE ENCODING ---------
@@ -77,7 +78,7 @@ class RefNet(nn.Module):
         #                                     #
         #######################################
 
-        # --------- HOUGH VOTING ---------
+        # --------- BACKBONE NET---------
         data_dict = self.backbone_net(data_dict)
                 
         # --------- HOUGH VOTING ---------
