@@ -95,9 +95,6 @@ class RefNetV2(nn.Module):
         # --------- TRANSFORMER ---------
         data_dict = self.detector(data_dict)
 
-        #data_dict["vote_xyz"] = xyz
-        #data_dict["vote_features"] = features
-        
         if not self.no_reference:
             #######################################
             #                                     #

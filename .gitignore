@@ -3,5 +3,6 @@ outputs
 demo
 docs
 LICENSE
-__pycache__
+*pyc
+.vscode
 
