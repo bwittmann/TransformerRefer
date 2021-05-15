@@ -121,6 +121,7 @@ class ScannetReferenceDataset(Dataset):
         ref_heading_residual_label = 0
         ref_size_class_label = 0
         ref_size_residual_label = np.zeros(3) # bbox size residual for reference target
+        size_gts = np.zeros((MAX_NUM_OBJ, 3))
 
         if self.split != "test":
             num_bbox = instance_bboxes.shape[0] if instance_bboxes.shape[0] < MAX_NUM_OBJ else MAX_NUM_OBJ
@@ -163,12 +164,16 @@ class ScannetReferenceDataset(Dataset):
                 # Translation
                 point_cloud, target_bboxes = self._translate(point_cloud, target_bboxes)
 
+            gt_centers = target_bboxes[:, 0:3]
+            gt_centers[instance_bboxes.shape[0]:, :] += 1000.0  # padding centers with a large number
             # compute votes *AFTER* augmentation
             # generate votes
             # Note: since there's no map between bbox instance labels and
             # pc instance_labels (it had been filtered 
             # in the data preparation step) we'll compute the instance bbox
-            # from the points sharing the same instance label. 
+            # from the points sharing the same instance label.
+            point_obj_mask = np.zeros(self.num_points)
+            point_instance_label = np.zeros(self.num_points) - 1
             for i_instance in np.unique(instance_labels):            
                 # find all points belong to that instance
                 ind = np.where(instance_labels == i_instance)[0]
@@ -178,12 +183,17 @@ class ScannetReferenceDataset(Dataset):
                     center = 0.5*(x.min(0) + x.max(0))
                     point_votes[ind, :] = center - x
                     point_votes_mask[ind] = 1.0
+                    ilabel = np.argmin(((center - gt_centers) ** 2).sum(-1))
+                    point_instance_label[ind] = ilabel
+                    point_obj_mask[ind] = 1.0
+
             point_votes = np.tile(point_votes, (1, 3)) # make 3 votes identical 
             
             class_ind = [DC.nyu40id2class[int(x)] for x in instance_bboxes[:num_bbox,-2]]
             # NOTE: set size class as semantic class. Consider use size2class.
             size_classes[0:num_bbox] = class_ind
             size_residuals[0:num_bbox, :] = target_bboxes[0:num_bbox, 3:6] - DC.mean_size_arr[class_ind,:]
+            size_gts[0:num_bbox, :] = target_bboxes[0:num_bbox, 3:6]
 
             # construct the reference target label for each bbox
             ref_box_label = np.zeros(MAX_NUM_OBJ)
@@ -237,6 +247,10 @@ class ScannetReferenceDataset(Dataset):
         data_dict["unique_multiple"] = np.array(self.unique_multiple_lookup[scene_id][str(object_id)][ann_id]).astype(np.int64)
         data_dict["pcl_color"] = pcl_color
         data_dict["load_time"] = time.time() - start
+        # Added for transformer
+        data_dict["size_gts"] = size_gts.astype(np.float32)
+        data_dict['point_obj_mask'] = point_obj_mask.astype(np.int64)
+        data_dict['point_instance_label'] = point_instance_label.astype(np.int64)
 
         return data_dict
     
