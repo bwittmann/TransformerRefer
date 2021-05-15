@@ -20,6 +20,7 @@ from lib.dataset import ScannetReferenceDataset
 from lib.solver import Solver
 from lib.ap_helper import APCalculator, parse_predictions, parse_groundtruths
 from lib.loss_helper import get_loss
+from lib.loss_helper_detector import get_loss_detector
 from lib.eval_helper import get_eval
 from models.refnet import RefNet
 from models.refnetV2 import RefNetV2
@@ -164,13 +165,25 @@ def eval_ref(args):
 
                 # feed
                 data = model(data)
-                _, data = get_loss(
-                    data_dict=data, 
-                    config=DC, 
-                    detection=True,
-                    reference=True, 
-                    use_lang_classifier=not args.no_lang_cls
-                )
+
+                if args.transformer:
+                    _, data = get_loss_detector(end_points=data, 
+                                                config=DC,
+                                                num_decoder_layers=6, 
+                                                query_points_generator_loss_coef=0.8,
+                                                obj_loss_coef=0.1,
+                                                box_loss_coef=1,
+                                                sem_cls_loss_coef=0.1
+                    )
+                else:
+                    _, data = get_loss(
+                        data_dict=data, 
+                        config=DC, 
+                        detection=True,
+                        reference=True, 
+                        use_lang_classifier=not args.no_lang_cls
+                    )
+                    
                 data = get_eval(
                     data_dict=data, 
                     config=DC,
