@@ -2,12 +2,13 @@ import torch
 import torch.nn as nn
 
 class MatchModule(nn.Module):
-    def __init__(self, num_proposals=256, lang_size=256, hidden_size=128):
+    def __init__(self, num_proposals=256, lang_size=256, hidden_size=128, use_trans=False):
         super().__init__() 
 
         self.num_proposals = num_proposals
         self.lang_size = lang_size
         self.hidden_size = hidden_size
+        self.use_trans = use_trans
         
         self.fuse = nn.Sequential(
             nn.Conv1d(self.lang_size + 128, hidden_size, 1),
@@ -34,8 +35,12 @@ class MatchModule(nn.Module):
         """
 
         # unpack outputs from detection branch
-        features = data_dict['aggregated_vote_features'] # batch_size, num_proposal, 128
-        objectness_masks = data_dict['objectness_scores'].max(2)[1].float().unsqueeze(2) # batch_size, num_proposals, 1
+        if self.use_trans:
+            features = data_dict['last_features']
+            objectness_masks = data_dict['last_objectness_scores'].max(2)[1].float().unsqueeze(2) # batch_size, num_proposals, 1
+        else:
+            features = data_dict['aggregated_vote_features'] # batch_size, num_proposal, 128
+            objectness_masks = data_dict['objectness_scores'].max(2)[1].float().unsqueeze(2) # batch_size, num_proposals, 1
 
         # unpack outputs from language branch
         lang_feat = data_dict["lang_emb"] # batch_size, lang_size

@@ -10,7 +10,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
 sys.path.append(BASE_DIR)
 sys.path.append(os.path.join(ROOT_DIR, 'pointnet2'))
-import lib.pointnet2.pointnet2_utils
+import pointnet2_utils
 
 
 class PointsObjClsModule(nn.Module):
@@ -179,6 +179,7 @@ class PredictHead(nn.Module):
         end_points[f'{prefix}size_residuals'] = size_residuals
         end_points[f'{prefix}pred_size'] = pred_size
         end_points[f'{prefix}sem_cls_scores'] = sem_cls_scores
+        end_points[f'{prefix}features'] = features
 
         # # used to check bbox size
         # l = pred_size[:, :, 0]

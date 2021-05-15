@@ -10,8 +10,21 @@ from models.voting_module import VotingModule
 from models.proposal_module import ProposalModule
 from models.lang_module import LangModule
 from models.match_module import MatchModule
+from models.detector import GroupFreeDetector
 
-class RefNet(nn.Module):
+
+# TODO: 
+# 1. Add GroupFreeDetector, DONE
+# 2. Add argparse arguments for detector
+# 3. Check if all necessary files have been imported
+# 4. Change dimensions of features/querry from [B, 288, 256] to [B, 128, 256]
+#    is possible via a MLP.
+# 5. Think about using a pre-trained detector. Maybe for first step pre-trained
+#    VoteNet vs. pre-trained detector. Reimplement load_state_dict in eval.py.
+# 6. Make eval work first and then train.
+
+
+class RefNetV2(nn.Module):
     def __init__(self, num_class, num_heading_bin, num_size_cluster, mean_size_arr, 
     input_feature_dim=0, num_proposal=128, vote_factor=1, sampling="vote_fps",
     use_lang_classifier=True, use_bidir=False, no_reference=False,
@@ -32,17 +45,15 @@ class RefNet(nn.Module):
         self.no_reference = no_reference
 
 
-        # TODO: 
-        # 1. Add GroupFreeDetector
-        # 2. Add argparse arguments for detector
-        # 3. Check if all necessary files have been imported
-        # 4. Change dimensions of features/querry from [B, 288, 256] to [B, 128, 256]
-        #    is possible via a MLP.
-        # 5. Think about using a pre-trained detector. Maybe for first step pre-trained
-        #    VoteNet vs. pre-trained detector.
-        # 6. Make eval work first and then train.
+        # ---------- TRANSFORMER ------------
+        self.detector = GroupFreeDetector(num_class=num_class,
+                              num_heading_bin=num_heading_bin,
+                              num_size_cluster=num_size_cluster,
+                              mean_size_arr=mean_size_arr,
+                              input_feature_dim=input_feature_dim,
+                              num_proposal=num_proposal,
+                              self_position_embedding='loc_learned')
         
-
         if not no_reference:
             # --------- LANGUAGE ENCODING ---------
             # Encode the input descriptions into vectors
@@ -51,7 +62,7 @@ class RefNet(nn.Module):
 
             # --------- PROPOSAL MATCHING ---------
             # Match the generated proposals and select the most confident ones
-            self.match = MatchModule(num_proposals=num_proposal, lang_size=(1 + int(self.use_bidir)) * hidden_size)
+            self.match = MatchModule(num_proposals=num_proposal, lang_size=(1 + int(self.use_bidir)) * hidden_size, use_trans=True)
 
     def forward(self, data_dict):
         """ Forward pass of the network
@@ -78,25 +89,9 @@ class RefNet(nn.Module):
         #                                     #
         #######################################
 
-        # --------- BACKBONE NET---------
-        data_dict = self.backbone_net(data_dict)
-                
-        # --------- HOUGH VOTING ---------
-        xyz = data_dict["fp2_xyz"]
-        features = data_dict["fp2_features"]
-        data_dict["seed_inds"] = data_dict["fp2_inds"]
-        data_dict["seed_xyz"] = xyz
-        data_dict["seed_features"] = features
+        # --------- TRANSFORMER ---------
+        data_dict = self.detector(data_dict)
         
-        xyz, features = self.vgen(xyz, features)
-        features_norm = torch.norm(features, p=2, dim=1)
-        features = features.div(features_norm.unsqueeze(1))
-        data_dict["vote_xyz"] = xyz
-        data_dict["vote_features"] = features
-
-        # --------- PROPOSAL GENERATION ---------
-        data_dict = self.proposal(xyz, features, data_dict)
-
         if not self.no_reference:
             #######################################
             #                                     #

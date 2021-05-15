@@ -18,8 +18,10 @@ class Pointnet2Backbone(nn.Module):
        input_feature_dim: int
             Number of input channels in the feature descriptor for each point.
             e.g. 3 for RGB.
+        use_trans: bool
+            To make backbone compatible with the transformer.
     """
-    def __init__(self, input_feature_dim=0):
+    def __init__(self, input_feature_dim=0, use_trans=False):
         super().__init__()
 
         self.input_feature_dim = input_feature_dim
@@ -63,7 +65,11 @@ class Pointnet2Backbone(nn.Module):
 
         # --------- 2 FEATURE UPSAMPLING LAYERS --------
         self.fp1 = PointnetFPModule(mlp=[256+256,256,256])
-        self.fp2 = PointnetFPModule(mlp=[256+256,256,256])
+        if use_trans:
+            self.fp2 = PointnetFPModule(mlp=[256+256,256,288])
+        else:
+            self.fp2 = PointnetFPModule(mlp=[256+256,256,256])
+
 
     def _break_up_pc(self, pc):
         xyz = pc[..., :3].contiguous()

@@ -22,6 +22,7 @@ from lib.ap_helper import APCalculator, parse_predictions, parse_groundtruths
 from lib.loss_helper import get_loss
 from lib.eval_helper import get_eval
 from models.refnet import RefNet
+from models.refnetV2 import RefNetV2
 from data.scannet.model_util_scannet import ScannetDatasetConfig
 
 SCANREFER_TRAIN = json.load(open(os.path.join(CONF.PATH.DATA, "ScanRefer_filtered_train.json")))
@@ -47,16 +48,29 @@ def get_dataloader(args, scanrefer, all_scene_list, split, config):
 def get_model(args, config):
     # load model
     input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(not args.no_height)
-    model = RefNet(
-        num_class=config.num_class,
-        num_heading_bin=config.num_heading_bin,
-        num_size_cluster=config.num_size_cluster,
-        mean_size_arr=config.mean_size_arr,
-        num_proposal=args.num_proposals,
-        input_feature_dim=input_channels,
-        use_lang_classifier=(not args.no_lang_cls),
-        use_bidir=args.use_bidir
-    ).cuda()
+    
+    if args.transformer:
+        model = RefNetV2(
+            num_class=config.num_class,
+            num_heading_bin=config.num_heading_bin,
+            num_size_cluster=config.num_size_cluster,
+            mean_size_arr=config.mean_size_arr,
+            num_proposal=args.num_proposals,
+            input_feature_dim=input_channels,
+            use_lang_classifier=(not args.no_lang_cls),
+            use_bidir=args.use_bidir
+        ).cuda()
+    else:
+       model = RefNet(
+            num_class=config.num_class,
+            num_heading_bin=config.num_heading_bin,
+            num_size_cluster=config.num_size_cluster,
+            mean_size_arr=config.mean_size_arr,
+            num_proposal=args.num_proposals,
+            input_feature_dim=input_channels,
+            use_lang_classifier=(not args.no_lang_cls),
+            use_bidir=args.use_bidir
+        ).cuda() 
 
     model_name = "model_last.pth" if args.detection else "model.pth"
     path = os.path.join(CONF.PATH.OUTPUT, args.folder, model_name)
@@ -448,6 +462,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_best", action="store_true", help="Use best bounding boxes as outputs.")
     parser.add_argument("--reference", action="store_true", help="evaluate the reference localization results")
     parser.add_argument("--detection", action="store_true", help="evaluate the object detection results")
+    parser.add_argument("--transformer", action="store_true", help="Use the transformer for object detection")
     args = parser.parse_args()
 
     # setting
