@@ -22,6 +22,9 @@ from models.detector import GroupFreeDetector
 # 5. Think about using a pre-trained detector. Maybe for first step pre-trained
 #    VoteNet vs. pre-trained detector. Reimplement load_state_dict in eval.py.
 # 6. Make eval work first and then train.
+# 7. Think if it makes difference that transformer backbone was trained with xyz only.
+# 8. Check if objectness mask gets determinated correctly.
+# 9. Make loss functions work.
 
 
 class RefNetV2(nn.Module):
@@ -91,6 +94,9 @@ class RefNetV2(nn.Module):
 
         # --------- TRANSFORMER ---------
         data_dict = self.detector(data_dict)
+
+        #data_dict["vote_xyz"] = xyz
+        #data_dict["vote_features"] = features
         
         if not self.no_reference:
             #######################################

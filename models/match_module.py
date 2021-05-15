@@ -10,10 +10,17 @@ class MatchModule(nn.Module):
         self.hidden_size = hidden_size
         self.use_trans = use_trans
         
-        self.fuse = nn.Sequential(
-            nn.Conv1d(self.lang_size + 128, hidden_size, 1),
-            nn.ReLU()
-        )
+        if use_trans:
+            self.fuse = nn.Sequential(
+                nn.Conv1d(self.lang_size + 288, hidden_size, 1),
+                nn.ReLU()
+            )
+        else:
+           self.fuse = nn.Sequential(
+                nn.Conv1d(self.lang_size + 128, hidden_size, 1),
+                nn.ReLU()
+            )
+ 
         # self.match = nn.Conv1d(hidden_size, 1, 1)
         self.match = nn.Sequential(
             nn.Conv1d(hidden_size, hidden_size, 1),
@@ -36,7 +43,7 @@ class MatchModule(nn.Module):
 
         # unpack outputs from detection branch
         if self.use_trans:
-            features = data_dict['last_features']
+            features = data_dict['last_features'].permute(0, 2, 1).contiguous()
             objectness_masks = data_dict['last_objectness_scores'].max(2)[1].float().unsqueeze(2) # batch_size, num_proposals, 1
         else:
             features = data_dict['aggregated_vote_features'] # batch_size, num_proposal, 128

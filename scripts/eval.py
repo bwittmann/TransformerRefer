@@ -61,7 +61,7 @@ def get_model(args, config):
             use_bidir=args.use_bidir
         ).cuda()
     else:
-       model = RefNet(
+        model = RefNet(
             num_class=config.num_class,
             num_heading_bin=config.num_heading_bin,
             num_size_cluster=config.num_size_cluster,
@@ -72,9 +72,10 @@ def get_model(args, config):
             use_bidir=args.use_bidir
         ).cuda() 
 
-    model_name = "model_last.pth" if args.detection else "model.pth"
-    path = os.path.join(CONF.PATH.OUTPUT, args.folder, model_name)
-    model.load_state_dict(torch.load(path), strict=False)
+        model_name = "model_last.pth" if args.detection else "model.pth"
+        path = os.path.join(CONF.PATH.OUTPUT, args.folder, model_name)
+        model.load_state_dict(torch.load(path), strict=False)
+    
     model.eval()
 
     return model
