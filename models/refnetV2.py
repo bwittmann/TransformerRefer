@@ -18,13 +18,13 @@ from models.detector import GroupFreeDetector
 # 2. Add argparse arguments for detector
 # 3. Check if all necessary files have been imported
 # 4. Change dimensions of features/querry from [B, 288, 256] to [B, 128, 256]
-#    is possible via a MLP.
-# 5. Think about using a pre-trained detector. Maybe for first step pre-trained
+#    is possible via a MLP. DONE
+# 5. Think about using a pre-trained detector. Maybe for first step pre-trained.
 #    VoteNet vs. pre-trained detector. Reimplement load_state_dict in eval.py.
 # 6. Make eval work first and then train.
 # 7. Think if it makes difference that transformer backbone was trained with xyz only.
 # 8. Check if objectness mask gets determinated correctly.
-# 9. Make loss functions work.
+# 9. Make loss functions work -> add additional losses to get_loss_detector.
 
 
 class RefNetV2(nn.Module):

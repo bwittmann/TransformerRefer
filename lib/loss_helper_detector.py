@@ -330,4 +330,10 @@ def get_loss_detector(end_points, config, num_decoder_layers,
     loss *= 10
 
     end_points['loss'] = loss
+
+    # Rename scores and residuals from last layer to match with ScanRefer
+    # TODO: Check shape differences to ScanRefer.
+    end_points['objectness_label'] = end_points['last_objectness_label']
+
+
     return loss, end_points
