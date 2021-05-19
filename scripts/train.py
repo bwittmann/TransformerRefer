@@ -37,8 +37,7 @@ def get_dataloader(args, scanrefer, all_scene_list, split, config, augment):
         use_normal=args.use_normal, 
         use_multiview=args.use_multiview
     )
-    # dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
     return dataset, dataloader
 
@@ -231,10 +230,12 @@ def train(args):
     save_info(args, root, num_params, train_dataset, val_dataset)
     solver(args.epoch, args.verbose)
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--tag", type=str, help="tag for the training, e.g. cuda_wl", default="")
     parser.add_argument("--gpu", type=str, help="gpu", default="0")
+    parser.add_argument("--num_workers", type=int, help="number of workers for dataloader", default=4)
     parser.add_argument("--batch_size", type=int, help="batch size", default=14)
     parser.add_argument("--epoch", type=int, help="number of epochs", default=50)
     parser.add_argument("--verbose", type=int, help="iterations of showing verbose", default=10)
@@ -269,4 +270,3 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
 
     train(args)
-    
