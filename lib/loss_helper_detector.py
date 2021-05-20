@@ -354,6 +354,7 @@ def compute_lang_classification_loss(data_dict):
 
     return loss
 
+
 def get_loss_detector(end_points, config, num_decoder_layers,
                       query_points_generator_loss_coef, obj_loss_coef, box_loss_coef, sem_cls_loss_coef,
                       query_points_obj_topk=5,
@@ -446,5 +447,6 @@ def get_loss_detector(end_points, config, num_decoder_layers,
     # Rename scores and residuals from last layer to match with ScanRefer
     end_points['objectness_label'] = end_points['last_objectness_label']
     end_points['objectness_mask'] = end_points['last_objectness_mask']
+    end_points['object_assignment'] = end_points['last_object_assignment']
 
     return loss, end_points

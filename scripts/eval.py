@@ -50,6 +50,7 @@ def get_model(args, config):
     # load model
     input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(not args.no_height)
     
+    # TODO: Add weights of the transformer.
     if args.transformer:
         model = RefNetV2(
             num_class=config.num_class,

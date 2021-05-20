@@ -29,6 +29,7 @@ from models.detector import GroupFreeDetector
 # Change end_points to data_dict globally.
 # Implement use_lang_classifier in loss_helper_detector.py.
 # Change coefficients in final loss in loss_helper_detector.py.
+# Add pretrained transformer weights in eval.py.
 
 
 class RefNetV2(nn.Module):
