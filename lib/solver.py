@@ -16,6 +16,7 @@ from torch.optim.lr_scheduler import StepLR, MultiStepLR
 sys.path.append(os.path.join(os.getcwd(), "lib")) # HACK add the lib folder
 from lib.config import CONF
 from lib.loss_helper import get_loss
+from lib.loss_helper_detector import get_loss_detector
 from lib.eval_helper import get_eval
 from utils.eta import decode_eta
 from lib.pointnet2.pytorch_utils import BNMomentumScheduler
@@ -86,7 +87,7 @@ BEST_REPORT_TEMPLATE = """
 
 class Solver():
     def __init__(self, model, config, dataloader, optimizer, stamp, val_step=10, 
-    detection=True, reference=True, use_lang_classifier=True,
+    detection=True, reference=True, use_lang_classifier=True, use_trans=False,
     lr_decay_step=None, lr_decay_rate=None, bn_decay_step=None, bn_decay_rate=None):
 
         self.epoch = 0                    # set in __call__
@@ -102,6 +103,7 @@ class Solver():
         self.detection = detection
         self.reference = reference
         self.use_lang_classifier = use_lang_classifier
+        self.use_trans = use_trans
 
         self.lr_decay_step = lr_decay_step
         self.lr_decay_rate = lr_decay_rate
@@ -262,19 +264,34 @@ class Solver():
         self.optimizer.step()
 
     def _compute_loss(self, data_dict):
-        _, data_dict = get_loss(
-            data_dict=data_dict, 
-            config=self.config, 
-            detection=self.detection,
-            reference=self.reference, 
-            use_lang_classifier=self.use_lang_classifier
-        )
+
+        if self.use_trans:
+            _, data_dict = get_loss_detector(
+                end_points=data_dict, 
+                config=self.config,
+                num_decoder_layers=6, 
+                query_points_generator_loss_coef=0.8,
+                obj_loss_coef=0.1,
+                box_loss_coef=1,
+                sem_cls_loss_coef=0.1,
+                detection=self.detection,
+                reference=self.reference,
+                use_lang_classifier=self.use_lang_classifier
+            )
+        else:
+            _, data_dict = get_loss(
+                data_dict=data_dict, 
+                config=self.config, 
+                detection=self.detection,
+                reference=self.reference, 
+                use_lang_classifier=self.use_lang_classifier
+            )
 
         # dump
         self._running_log["ref_loss"] = data_dict["ref_loss"]
         self._running_log["lang_loss"] = data_dict["lang_loss"]
         self._running_log["objectness_loss"] = data_dict["objectness_loss"]
-        self._running_log["vote_loss"] = data_dict["vote_loss"]
+        self._running_log["vote_loss"] = data_dict["vote_loss"] # TODO: Think about.
         self._running_log["box_loss"] = data_dict["box_loss"]
         self._running_log["loss"] = data_dict["loss"]
 
@@ -332,7 +349,7 @@ class Solver():
             # load
             self.log[phase]["fetch"].append(data_dict["load_time"].sum().item())
 
-            with torch.autograd.set_detect_anomaly(True):
+            with torch.autograd.set_detect_anomaly(True):   # TODO: Only for debugging slows down comp.
                 # forward
                 start = time.time()
                 data_dict = self._forward(data_dict)
@@ -355,7 +372,7 @@ class Solver():
             self.log[phase]["ref_loss"].append(self._running_log["ref_loss"].item())
             self.log[phase]["lang_loss"].append(self._running_log["lang_loss"].item())
             self.log[phase]["objectness_loss"].append(self._running_log["objectness_loss"].item())
-            self.log[phase]["vote_loss"].append(self._running_log["vote_loss"].item())
+            self.log[phase]["vote_loss"].append(self._running_log["vote_loss"].item()) # TODO
             self.log[phase]["box_loss"].append(self._running_log["box_loss"].item())
 
             self.log[phase]["lang_acc"].append(self._running_log["lang_acc"])
@@ -377,7 +394,7 @@ class Solver():
                     self._train_report(epoch_id)
 
                 # evaluation
-                if self._global_iter_id % self.val_step == 0:
+                if False: #self._global_iter_id % self.val_step == 0: TODO
                     print("evaluating...")
                     # val
                     self._feed(self.dataloader["val"], "val", epoch_id)
@@ -403,7 +420,7 @@ class Solver():
                 self.best["ref_loss"] = np.mean(self.log[phase]["ref_loss"])
                 self.best["lang_loss"] = np.mean(self.log[phase]["lang_loss"])
                 self.best["objectness_loss"] = np.mean(self.log[phase]["objectness_loss"])
-                self.best["vote_loss"] = np.mean(self.log[phase]["vote_loss"])
+                self.best["vote_loss"] = np.mean(self.log[phase]["vote_loss"]) # TODO
                 self.best["box_loss"] = np.mean(self.log[phase]["box_loss"])
                 self.best["lang_acc"] = np.mean(self.log[phase]["lang_acc"])
                 self.best["ref_acc"] = np.mean(self.log[phase]["ref_acc"])

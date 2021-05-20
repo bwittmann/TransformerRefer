@@ -19,6 +19,7 @@ from lib.dataset import ScannetReferenceDataset
 from lib.solver import Solver
 from lib.config import CONF
 from models.refnet import RefNet
+from models.refnetV2 import RefNetV2
 
 SCANREFER_TRAIN = json.load(open(os.path.join(CONF.PATH.DATA, "ScanRefer_filtered_train.json")))
 SCANREFER_VAL = json.load(open(os.path.join(CONF.PATH.DATA, "ScanRefer_filtered_val.json")))
@@ -44,53 +45,69 @@ def get_dataloader(args, scanrefer, all_scene_list, split, config, augment):
 def get_model(args):
     # initiate model
     input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(not args.no_height)
-    model = RefNet(
-        num_class=DC.num_class,
-        num_heading_bin=DC.num_heading_bin,
-        num_size_cluster=DC.num_size_cluster,
-        mean_size_arr=DC.mean_size_arr,
-        input_feature_dim=input_channels,
-        num_proposal=args.num_proposals,
-        use_lang_classifier=(not args.no_lang_cls),
-        use_bidir=args.use_bidir,
-        no_reference=args.no_reference
-    )
 
-    # trainable model
-    if args.use_pretrained:
-        # load model
-        print("loading pretrained VoteNet...")
-        pretrained_model = RefNet(
+    if args.transformer:
+        model = RefNetV2(
             num_class=DC.num_class,
             num_heading_bin=DC.num_heading_bin,
             num_size_cluster=DC.num_size_cluster,
             mean_size_arr=DC.mean_size_arr,
             num_proposal=args.num_proposals,
             input_feature_dim=input_channels,
-            use_bidir=args.use_bidir,
-            no_reference=True
+            use_lang_classifier=(not args.no_lang_cls),
+            use_bidir=args.use_bidir
         )
 
-        pretrained_path = os.path.join(CONF.PATH.OUTPUT, args.use_pretrained, "model_last.pth")
-        pretrained_model.load_state_dict(torch.load(pretrained_path), strict=False)
+        # TODO: Add use_pretrained.
 
-        # mount
-        model.backbone_net = pretrained_model.backbone_net
-        model.vgen = pretrained_model.vgen
-        model.proposal = pretrained_model.proposal
+    else:
+        model = RefNet(
+            num_class=DC.num_class,
+            num_heading_bin=DC.num_heading_bin,
+            num_size_cluster=DC.num_size_cluster,
+            mean_size_arr=DC.mean_size_arr,
+            input_feature_dim=input_channels,
+            num_proposal=args.num_proposals,
+            use_lang_classifier=(not args.no_lang_cls),
+            use_bidir=args.use_bidir,
+            no_reference=args.no_reference
+        )
 
-        if args.no_detection:
-            # freeze pointnet++ backbone
-            for param in model.backbone_net.parameters():
-                param.requires_grad = False
+        # trainable model
+        if args.use_pretrained:
+            # load model
+            print("loading pretrained VoteNet...")
+            pretrained_model = RefNet(
+                num_class=DC.num_class,
+                num_heading_bin=DC.num_heading_bin,
+                num_size_cluster=DC.num_size_cluster,
+                mean_size_arr=DC.mean_size_arr,
+                num_proposal=args.num_proposals,
+                input_feature_dim=input_channels,
+                use_bidir=args.use_bidir,
+                no_reference=True
+            )
 
-            # freeze voting
-            for param in model.vgen.parameters():
-                param.requires_grad = False
-            
-            # freeze detector
-            for param in model.proposal.parameters():
-                param.requires_grad = False
+            pretrained_path = os.path.join(CONF.PATH.OUTPUT, args.use_pretrained, "model_last.pth")
+            pretrained_model.load_state_dict(torch.load(pretrained_path), strict=False)
+
+            # mount
+            model.backbone_net = pretrained_model.backbone_net
+            model.vgen = pretrained_model.vgen
+            model.proposal = pretrained_model.proposal
+
+            if args.no_detection:
+                # freeze pointnet++ backbone
+                for param in model.backbone_net.parameters():
+                    param.requires_grad = False
+
+                # freeze voting
+                for param in model.vgen.parameters():
+                    param.requires_grad = False
+                
+                # freeze detector
+                for param in model.proposal.parameters():
+                    param.requires_grad = False
     
     # to CUDA
     model = model.cuda()
@@ -136,6 +153,7 @@ def get_solver(args, dataloader):
         detection=not args.no_detection,
         reference=not args.no_reference, 
         use_lang_classifier=not args.no_lang_cls,
+        use_trans=args.transformer,
         lr_decay_step=LR_DECAY_STEP,
         lr_decay_rate=LR_DECAY_RATE,
         bn_decay_step=BN_DECAY_STEP,
@@ -257,6 +275,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_bidir", action="store_true", help="Use bi-directional GRU.")
     parser.add_argument("--use_pretrained", type=str, help="Specify the folder name containing the pretrained detection module.")
     parser.add_argument("--use_checkpoint", type=str, help="Specify the checkpoint root", default="")
+    parser.add_argument("--transformer", action="store_true", help="Use the transformer for object detection")
     args = parser.parse_args()
 
     # setting

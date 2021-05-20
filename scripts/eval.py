@@ -168,16 +168,17 @@ def eval_ref(args):
                 data = model(data)
 
                 if args.transformer:
-                    _, data = get_loss_detector(end_points=data, 
-                                                config=DC,
-                                                num_decoder_layers=6, 
-                                                query_points_generator_loss_coef=0.8,
-                                                obj_loss_coef=0.1,
-                                                box_loss_coef=1,
-                                                sem_cls_loss_coef=0.1,
-                                                detection=True,
-                                                reference=True, 
-                                                use_lang_classifier=not args.no_lang_cls
+                    _, data = get_loss_detector(
+                        end_points=data, 
+                        config=DC,
+                        num_decoder_layers=6, 
+                        query_points_generator_loss_coef=0.8,
+                        obj_loss_coef=0.1,
+                        box_loss_coef=1,
+                        sem_cls_loss_coef=0.1,
+                        detection=True,
+                        reference=True, 
+                        use_lang_classifier=not args.no_lang_cls
                     )
                 else:
                     _, data = get_loss(

@@ -448,5 +448,7 @@ def get_loss_detector(end_points, config, num_decoder_layers,
     end_points['objectness_label'] = end_points['last_objectness_label']
     end_points['objectness_mask'] = end_points['last_objectness_mask']
     end_points['object_assignment'] = end_points['last_object_assignment']
+    end_points['pos_ratio'] = end_points['last_pos_ratio']
+    end_points['neg_ratio'] = end_points['last_neg_ratio']
 
     return loss, end_points
