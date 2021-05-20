@@ -8,8 +8,8 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
 sys.path.append(os.path.join(ROOT_DIR, 'utils'))
-from lib.loss import smoothl1_loss, l1_loss, SigmoidFocalClassificationLoss
-
+from lib.loss import smoothl1_loss, l1_loss, SigmoidFocalClassificationLoss, SoftmaxRankingLoss
+from utils.box_util import get_3d_box, get_3d_box_batch, box3d_iou, box3d_iou_batch
 
 def compute_points_obj_cls_loss_hard_topk(end_points, topk):
     box_label_mask = end_points['box_label_mask']
@@ -102,6 +102,7 @@ def compute_objectness_loss_based_on_query_points(end_points, num_decoder_layers
         seed_instance_label = torch.gather(point_instance_label, 1, seed_inds)  # B,num_seed
         query_points_instance_label = torch.gather(seed_instance_label, 1, query_points_sample_inds)  # B,query_points
 
+        # TODO: Only ones? Does this make sense?
         objectness_mask = torch.ones((B, K)).cuda()
 
         # Set assignment
@@ -291,13 +292,78 @@ def compute_box_and_sem_cls_loss(end_points, config, num_decoder_layers,
     return box_loss_sum, sem_cls_loss_sum, end_points
 
 
+def compute_reference_loss(data_dict, config):
+    """ Compute cluster reference loss
+
+    Args:
+        data_dict: dict (read-only)
+
+    Returns:
+        ref_loss, lang_loss, cluster_preds, cluster_labels
+    """
+
+    # unpack
+    cluster_preds = data_dict["cluster_ref"] # (B, num_proposal)
+
+    # predicted bbox
+    pred_ref = data_dict['cluster_ref'].detach().cpu().numpy() # (B,)
+    pred_center = data_dict['center'].detach().cpu().numpy() # (B,K,3)
+    pred_heading_class = torch.argmax(data_dict['heading_scores'], -1) # B,num_proposal
+    pred_heading_residual = torch.gather(data_dict['heading_residuals'], 2, pred_heading_class.unsqueeze(-1)) # B,num_proposal,1
+    pred_heading_class = pred_heading_class.detach().cpu().numpy() # B,num_proposal
+    pred_heading_residual = pred_heading_residual.squeeze(2).detach().cpu().numpy() # B,num_proposal
+    pred_size_class = torch.argmax(data_dict['size_scores'], -1) # B,num_proposal
+    pred_size_residual = torch.gather(data_dict['size_residuals'], 2, pred_size_class.unsqueeze(-1).unsqueeze(-1).repeat(1,1,1,3)) # B,num_proposal,1,3
+    pred_size_class = pred_size_class.detach().cpu().numpy()
+    pred_size_residual = pred_size_residual.squeeze(2).detach().cpu().numpy() # B,num_proposal,3
+
+    # ground truth bbox
+    gt_center = data_dict['ref_center_label'].cpu().numpy() # (B,3)
+    gt_heading_class = data_dict['ref_heading_class_label'].cpu().numpy() # B
+    gt_heading_residual = data_dict['ref_heading_residual_label'].cpu().numpy() # B
+    gt_size_class = data_dict['ref_size_class_label'].cpu().numpy() # B
+    gt_size_residual = data_dict['ref_size_residual_label'].cpu().numpy() # B,3
+    # convert gt bbox parameters to bbox corners
+    gt_obb_batch = config.param2obb_batch(gt_center[:, 0:3], gt_heading_class, gt_heading_residual,
+                    gt_size_class, gt_size_residual)
+    gt_bbox_batch = get_3d_box_batch(gt_obb_batch[:, 3:6], gt_obb_batch[:, 6], gt_obb_batch[:, 0:3])
+
+    # compute the iou score for all predictd positive ref
+    batch_size, num_proposals = cluster_preds.shape
+    labels = np.zeros((batch_size, num_proposals))
+    for i in range(pred_ref.shape[0]):
+        # convert the bbox parameters to bbox corners
+        pred_obb_batch = config.param2obb_batch(pred_center[i, :, 0:3], pred_heading_class[i], pred_heading_residual[i],
+                    pred_size_class[i], pred_size_residual[i])
+        pred_bbox_batch = get_3d_box_batch(pred_obb_batch[:, 3:6], pred_obb_batch[:, 6], pred_obb_batch[:, 0:3])
+        ious = box3d_iou_batch(pred_bbox_batch, np.tile(gt_bbox_batch[i], (num_proposals, 1, 1)))
+        labels[i, ious.argmax()] = 1 # treat the bbox with highest iou score as the gt
+
+    cluster_labels = torch.FloatTensor(labels).cuda()
+
+    # reference loss
+    criterion = SoftmaxRankingLoss()
+    loss = criterion(cluster_preds, cluster_labels.float().clone())
+
+    return loss, cluster_preds, cluster_labels
+
+
+def compute_lang_classification_loss(data_dict):
+    criterion = torch.nn.CrossEntropyLoss()
+    loss = criterion(data_dict["lang_scores"], data_dict["object_cat"])
+
+    return loss
+
 def get_loss_detector(end_points, config, num_decoder_layers,
                       query_points_generator_loss_coef, obj_loss_coef, box_loss_coef, sem_cls_loss_coef,
                       query_points_obj_topk=5,
                       center_loss_type='smoothl1', center_delta=1.0,
                       size_loss_type='smoothl1', size_delta=1.0,
                       heading_loss_type='smoothl1', heading_delta=1.0,
-                      size_cls_agnostic=False):
+                      size_cls_agnostic=False,
+                      detection=True,
+                      reference=True,
+                      use_lang_classifier=False):
     """ Loss functions
     """
     if 'seeds_obj_cls_logits' in end_points.keys():
@@ -323,17 +389,62 @@ def get_loss_detector(end_points, config, num_decoder_layers,
     end_points['sum_heads_box_loss'] = box_loss_sum
     end_points['sum_heads_sem_cls_loss'] = sem_cls_loss_sum
 
+    if detection:
+        #data_dict['vote_loss'] = vote_loss #end_points['query_points_generation_loss']?
+        end_points['objectness_loss'] = objectness_loss_sum
+        end_points['center_loss'] = end_points['last_center_loss']
+        end_points['heading_cls_loss'] = end_points['last_heading_cls_loss']
+        end_points['heading_reg_loss'] = end_points['last_heading_reg_loss']
+        end_points['size_cls_loss'] = end_points['last_size_cls_loss']
+        end_points['size_reg_loss'] = end_points['last_size_reg_loss']
+        end_points['sem_cls_loss'] = end_points['last_sem_cls_loss']
+        end_points['box_loss'] = end_points['last_box_loss']
+    else:
+        #data_dict['vote_loss'] = torch.zeros(1)[0].cuda()
+        end_points['objectness_loss'] = torch.zeros(1)[0].cuda()
+        end_points['center_loss'] = torch.zeros(1)[0].cuda()
+        end_points['heading_cls_loss'] = torch.zeros(1)[0].cuda()
+        end_points['heading_reg_loss'] = torch.zeros(1)[0].cuda()
+        end_points['size_cls_loss'] = torch.zeros(1)[0].cuda()
+        end_points['size_reg_loss'] = torch.zeros(1)[0].cuda()
+        end_points['sem_cls_loss'] = torch.zeros(1)[0].cuda()
+        end_points['box_loss'] = torch.zeros(1)[0].cuda()
+
+    if reference:
+        # Reference loss
+        ref_loss, _, cluster_labels = compute_reference_loss(end_points, config)
+        end_points["cluster_labels"] = cluster_labels
+        end_points["ref_loss"] = ref_loss
+    else:
+        # # Reference loss
+        # ref_loss, _, cluster_labels = compute_reference_loss(data_dict, config)
+        # data_dict["cluster_labels"] = cluster_labels
+        end_points["cluster_labels"] = end_points['last_objectness_label'].new_zeros(end_points['last_objectness_label'].shape).cuda()
+        end_points["cluster_ref"] = end_points['last_objectness_label'].new_zeros(end_points['last_objectness_label']).float().cuda()
+
+        # store
+        end_points["ref_loss"] = torch.zeros(1)[0].cuda()
+
+
+    # TODO: Implement
+    if reference and use_lang_classifier:
+        end_points["lang_loss"] = compute_lang_classification_loss(end_points)
+    else:
+        end_points["lang_loss"] = torch.zeros(1)[0].cuda()
+
+    # TODO: Change and improve the loss coefficients (especially for ref_loss)
     # means average proposal with prediction loss
     loss = query_points_generator_loss_coef * query_points_generation_loss + \
-           1.0 / (num_decoder_layers + 1) * (
-                   obj_loss_coef * objectness_loss_sum + box_loss_coef * box_loss_sum + sem_cls_loss_coef * sem_cls_loss_sum)
+           1.0 / (num_decoder_layers + 1) * \
+           (obj_loss_coef * objectness_loss_sum + box_loss_coef * box_loss_sum + sem_cls_loss_coef * sem_cls_loss_sum) + \
+            0.1 * ref_loss
+
     loss *= 10
 
     end_points['loss'] = loss
 
     # Rename scores and residuals from last layer to match with ScanRefer
-    # TODO: Check shape differences to ScanRefer.
     end_points['objectness_label'] = end_points['last_objectness_label']
-
+    end_points['objectness_mask'] = end_points['last_objectness_mask']
 
     return loss, end_points

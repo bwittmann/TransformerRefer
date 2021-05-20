@@ -227,7 +227,6 @@ class GroupFreeDetector(nn.Module):
             base_size = base_size.detach().clone()
 
         # Rename scores and residuals from last layer to match with ScanRefer
-        # TODO: Check shape differences to ScanRefer: objectness_scores
         end_points['objectness_scores'] = end_points['last_objectness_scores']
         end_points['center'] = end_points['last_center']
         end_points['heading_scores'] = end_points['last_heading_scores'] 
@@ -235,6 +234,9 @@ class GroupFreeDetector(nn.Module):
         end_points['size_scores'] = end_points['last_size_scores']
         end_points['size_residuals_normalized'] = end_points['last_size_residuals_normalized']
         end_points['sem_cls_scores'] = end_points['last_sem_cls_scores']
+
+        end_points['heading_residuals'] = end_points['last_heading_residuals']
+        end_points['size_residuals'] = end_points['last_size_residuals']
 
         return end_points
 
