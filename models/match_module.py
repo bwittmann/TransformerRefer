@@ -45,7 +45,9 @@ class MatchModule(nn.Module):
         if self.use_trans:
             features = data_dict['last_features'].permute(0, 2, 1).contiguous()
             # TODO: Wrong dimensions.
-            objectness_masks = data_dict['objectness_scores'].max(2)[1].float().unsqueeze(2) # batch_size, num_proposals, 1
+            #objectness_masks = data_dict['objectness_scores'].max(2)[1].float().unsqueeze(2) # batch_size, num_proposals, 1
+            objectness_masks = torch.zeros_like(data_dict['objectness_scores'])
+            objectness_masks[data_dict['objectness_scores'] > 0] = 1
         else:
             features = data_dict['aggregated_vote_features'] # batch_size, num_proposal, 128
             objectness_masks = data_dict['objectness_scores'].max(2)[1].float().unsqueeze(2) # batch_size, num_proposals, 1

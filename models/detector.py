@@ -228,7 +228,8 @@ class GroupFreeDetector(nn.Module):
 
         # Rename scores and residuals from last layer to match with ScanRefer
         # TODO: check if modification worked
-        end_points['objectness_scores'] = end_points['objectness_scores_mask']
+        #end_points['objectness_scores'] = end_points['objectness_scores_mask']
+        end_points['objectness_scores'] = end_points['last_objectness_scores']
 
         end_points['center'] = end_points['last_center']
         end_points['heading_scores'] = end_points['last_heading_scores'] 
