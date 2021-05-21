@@ -122,7 +122,10 @@ class PredictHead(nn.Module):
 
         # TODO: Check if modification worked.
         #self.objectness_scores_mask_head = torch.nn.Conv1d(seed_feat_dim, 2, 1)
-        self.objectness_scores_head = torch.nn.Conv1d(seed_feat_dim, 3, 1) # prev 1 output dim
+        #self.objectness_scores_head = torch.nn.Conv1d(seed_feat_dim, 3, 1)
+        self.objectness_scores_head = torch.nn.Conv1d(seed_feat_dim, 1, 1)
+        self.objectness_scores_mask_head = torch.nn.Conv1d(seed_feat_dim, 2, 1)
+
         self.center_residual_head = torch.nn.Conv1d(seed_feat_dim, 3, 1)
         self.heading_class_head = torch.nn.Conv1d(seed_feat_dim, num_heading_bin, 1)
         self.heading_residual_head = torch.nn.Conv1d(seed_feat_dim, num_heading_bin, 1)
@@ -146,8 +149,8 @@ class PredictHead(nn.Module):
         objectness_scores = self.objectness_scores_head(net).transpose(2, 1)  # (batch_size, num_proposal, 1)
         
         # TODO: check if modification worked
-        objectness_scores_mask = objectness_scores[:, :, 1:]
-        objectness_scores = objectness_scores[:, :, 0].unsqueeze(2)
+        #objectness_scores_mask = objectness_scores[:, :, 1:]
+        #objectness_scores = objectness_scores[:, :, 0].unsqueeze(2)
 
         # center
         center_residual = self.center_residual_head(net).transpose(2, 1)  # (batch_size, num_proposal, 3)
@@ -190,6 +193,7 @@ class PredictHead(nn.Module):
 
         # TODO Check if modification worked:
         if prefix == 'last_':
+            objectness_scores_mask = self.objectness_scores_mask_head(net).transpose(2, 1)
             end_points['objectness_scores_mask'] = objectness_scores_mask
 
         # # used to check bbox size
