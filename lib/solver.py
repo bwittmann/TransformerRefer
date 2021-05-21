@@ -291,7 +291,7 @@ class Solver():
         self._running_log["ref_loss"] = data_dict["ref_loss"]
         self._running_log["lang_loss"] = data_dict["lang_loss"]
         self._running_log["objectness_loss"] = data_dict["objectness_loss"]
-        self._running_log["vote_loss"] = data_dict["vote_loss"] # TODO: Think about.
+        #self._running_log["vote_loss"] = data_dict["vote_loss"] # TODO: Think about.
         self._running_log["box_loss"] = data_dict["box_loss"]
         self._running_log["loss"] = data_dict["loss"]
 
@@ -372,7 +372,7 @@ class Solver():
             self.log[phase]["ref_loss"].append(self._running_log["ref_loss"].item())
             self.log[phase]["lang_loss"].append(self._running_log["lang_loss"].item())
             self.log[phase]["objectness_loss"].append(self._running_log["objectness_loss"].item())
-            self.log[phase]["vote_loss"].append(self._running_log["vote_loss"].item()) # TODO
+            #self.log[phase]["vote_loss"].append(self._running_log["vote_loss"].item()) # TODO
             self.log[phase]["box_loss"].append(self._running_log["box_loss"].item())
 
             self.log[phase]["lang_acc"].append(self._running_log["lang_acc"])
@@ -420,7 +420,7 @@ class Solver():
                 self.best["ref_loss"] = np.mean(self.log[phase]["ref_loss"])
                 self.best["lang_loss"] = np.mean(self.log[phase]["lang_loss"])
                 self.best["objectness_loss"] = np.mean(self.log[phase]["objectness_loss"])
-                self.best["vote_loss"] = np.mean(self.log[phase]["vote_loss"]) # TODO
+                #self.best["vote_loss"] = np.mean(self.log[phase]["vote_loss"]) # TODO
                 self.best["box_loss"] = np.mean(self.log[phase]["box_loss"])
                 self.best["lang_acc"] = np.mean(self.log[phase]["lang_acc"])
                 self.best["ref_acc"] = np.mean(self.log[phase]["ref_acc"])

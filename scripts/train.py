@@ -229,8 +229,8 @@ def train(args):
     print("preparing data...")
     scanrefer_train, scanrefer_val, all_scene_list = get_scanrefer(SCANREFER_TRAIN, SCANREFER_VAL, args.num_scenes)
     scanrefer = {
-        "train": scanrefer_train,
-        "val": scanrefer_val
+        "train": scanrefer_train[:1],
+        "val": scanrefer_val[:30]
     }
 
     # dataloader

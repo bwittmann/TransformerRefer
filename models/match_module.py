@@ -44,7 +44,9 @@ class MatchModule(nn.Module):
         # unpack outputs from detection branch
         if self.use_trans:
             features = data_dict['last_features'].permute(0, 2, 1).contiguous()
-            objectness_masks = data_dict['objectness_scores'].max(2)[1].float().unsqueeze(2) # batch_size, num_proposals, 1
+            objectness_masks = data_dict['objectness_scores'] #.max(2)[1].float().unsqueeze(2) # batch_size, num_proposals, 1
+            objectness_masks[objectness_masks > 0] = 1
+            objectness_masks[objectness_masks < 0] = 0
         else:
             features = data_dict['aggregated_vote_features'] # batch_size, num_proposal, 128
             objectness_masks = data_dict['objectness_scores'].max(2)[1].float().unsqueeze(2) # batch_size, num_proposals, 1
@@ -66,7 +68,7 @@ class MatchModule(nn.Module):
 
         # match
         confidences = self.match(features).squeeze(1) # batch_size, num_proposals
-                
+
         data_dict["cluster_ref"] = confidences
 
         return data_dict
