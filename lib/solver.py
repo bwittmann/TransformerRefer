@@ -10,7 +10,6 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
-from torch.optim.lr_scheduler import StepLR, MultiStepLR
 
 
 sys.path.append(os.path.join(os.getcwd(), "lib")) # HACK add the lib folder
@@ -19,7 +18,6 @@ from lib.loss_helper import get_loss
 from lib.loss_helper_detector import get_loss_detector
 from lib.eval_helper import get_eval
 from utils.eta import decode_eta
-from lib.pointnet2.pytorch_utils import BNMomentumScheduler
 
 
 ITER_REPORT_TEMPLATE = """
@@ -90,9 +88,9 @@ BEST_REPORT_TEMPLATE = """
 """
 
 class Solver():
-    def __init__(self, model, config, dataloader, optimizer, stamp, val_step=10, 
-    detection=True, reference=True, use_lang_classifier=True, use_trans=False,
-    lr_decay_step=None, lr_decay_rate=None, bn_decay_step=None, bn_decay_rate=None, no_validation=True):
+    def __init__(self, model, config, dataloader, optimizer, lr_scheduler, bn_scheduler, clip_norm, stamp, val_step=10,
+                 detection=True, reference=True, use_lang_classifier=True, use_trans=False, trans_args=None,
+                 no_validation=True):
 
         self.epoch = 0                    # set in __call__
         self.verbose = 0                  # set in __call__
@@ -101,6 +99,9 @@ class Solver():
         self.config = config
         self.dataloader = dataloader
         self.optimizer = optimizer
+        self.lr_scheduler = lr_scheduler
+        self.bn_scheduler = bn_scheduler
+        self.clip_norm = clip_norm
         self.stamp = stamp
         self.no_validation = no_validation
         self.val_step = val_step
@@ -109,11 +110,7 @@ class Solver():
         self.reference = reference
         self.use_lang_classifier = use_lang_classifier
         self.use_trans = use_trans
-
-        self.lr_decay_step = lr_decay_step
-        self.lr_decay_rate = lr_decay_rate
-        self.bn_decay_step = bn_decay_step
-        self.bn_decay_rate = bn_decay_rate
+        self.trans_args = trans_args
 
         self.best = {
             "epoch": 0,
@@ -163,25 +160,6 @@ class Solver():
         self.__epoch_report_template = EPOCH_REPORT_TEMPLATE
         self.__best_report_template = BEST_REPORT_TEMPLATE
 
-        # lr scheduler
-        if lr_decay_step and lr_decay_rate:
-            if isinstance(lr_decay_step, list):
-                self.lr_scheduler = MultiStepLR(optimizer, lr_decay_step, lr_decay_rate)
-            else:
-                self.lr_scheduler = StepLR(optimizer, lr_decay_step, lr_decay_rate)
-        else:
-            self.lr_scheduler = None
-
-        # bn scheduler
-        if bn_decay_step and bn_decay_rate:
-            it = -1
-            start_epoch = 0
-            BN_MOMENTUM_INIT = 0.5
-            BN_MOMENTUM_MAX = 0.001
-            bn_lbmd = lambda it: max(BN_MOMENTUM_INIT * bn_decay_rate**(int(it / bn_decay_step)), BN_MOMENTUM_MAX)
-            self.bn_scheduler = BNMomentumScheduler(model, bn_lambda=bn_lbmd, last_epoch=start_epoch-1)
-        else:
-            self.bn_scheduler = None
 
     def __call__(self, epoch, verbose):
         # setting
@@ -268,6 +246,8 @@ class Solver():
         # optimize
         self.optimizer.zero_grad()
         self._running_log["loss"].backward()
+        if self.use_trans and self.clip_norm > 0:
+            grad_total_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_norm)
         self.optimizer.step()
 
     def _compute_loss(self, data_dict):
@@ -277,10 +257,16 @@ class Solver():
                 end_points=data_dict, 
                 config=self.config,
                 num_decoder_layers=6, 
-                query_points_generator_loss_coef=0.8,
-                obj_loss_coef=0.1,
-                box_loss_coef=1,
-                sem_cls_loss_coef=0.1,
+                query_points_generator_loss_coef=self.trans_args["query_points_generator_loss_coef"],
+                obj_loss_coef=self.trans_args["obj_loss_coef"],
+                box_loss_coef=self.trans_args["box_loss_coef"],
+                sem_cls_loss_coef=self.trans_args["sem_cls_loss_coef"],
+                center_delta=self.trans_args["center_delta"],
+                size_delta=self.trans_args["size_delta"],
+                heading_delta=self.trans_args["heading_delta"],
+                detection_loss_coef=self.trans_args["detection_loss_coef"],
+                ref_loss_coef=self.trans_args["ref_loss_coef"],
+                lang_loss_coef=self.trans_args["lang_loss_coef"],
                 detection=self.detection,
                 reference=self.reference,
                 use_lang_classifier=self.use_lang_classifier
