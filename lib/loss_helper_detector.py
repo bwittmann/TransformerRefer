@@ -391,7 +391,7 @@ def get_loss_detector(end_points, config, num_decoder_layers,
     end_points['sum_heads_sem_cls_loss'] = sem_cls_loss_sum
 
     if detection:
-        #data_dict['vote_loss'] = vote_loss #end_points['query_points_generation_loss']?
+        end_points['query_points_generation_loss'] = query_points_generation_loss
         end_points['objectness_loss'] = objectness_loss_sum
         end_points['center_loss'] = end_points['last_center_loss']
         end_points['heading_cls_loss'] = end_points['last_heading_cls_loss']
@@ -401,7 +401,7 @@ def get_loss_detector(end_points, config, num_decoder_layers,
         end_points['sem_cls_loss'] = end_points['last_sem_cls_loss']
         end_points['box_loss'] = end_points['last_box_loss']
     else:
-        #data_dict['vote_loss'] = torch.zeros(1)[0].cuda()
+        end_points['query_points_generation_loss'] = torch.zeros(1)[0].cuda()
         end_points['objectness_loss'] = torch.zeros(1)[0].cuda()
         end_points['center_loss'] = torch.zeros(1)[0].cuda()
         end_points['heading_cls_loss'] = torch.zeros(1)[0].cuda()
@@ -438,7 +438,7 @@ def get_loss_detector(end_points, config, num_decoder_layers,
     loss = query_points_generator_loss_coef * query_points_generation_loss + \
            1.0 / (num_decoder_layers + 1) * \
            (obj_loss_coef * objectness_loss_sum + box_loss_coef * box_loss_sum + sem_cls_loss_coef * sem_cls_loss_sum) + \
-            0.1 * ref_loss + 0.1 * end_points["lang_loss"]
+            0.1 * end_points["ref_loss"] + 0.1 * end_points["lang_loss"]
 
     loss *= 10
 

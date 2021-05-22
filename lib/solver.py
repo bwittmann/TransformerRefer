@@ -29,6 +29,7 @@ ITER_REPORT_TEMPLATE = """
 [loss] train_lang_loss: {train_lang_loss}
 [loss] train_objectness_loss: {train_objectness_loss}
 [loss] train_vote_loss: {train_vote_loss}
+[loss] train_query_points_generation_loss: {train_query_points_generation_loss}
 [loss] train_box_loss: {train_box_loss}
 [loss] train_lang_acc: {train_lang_acc}
 [sco.] train_ref_acc: {train_ref_acc}
@@ -50,6 +51,7 @@ EPOCH_REPORT_TEMPLATE = """
 [train] train_lang_loss: {train_lang_loss}
 [train] train_objectness_loss: {train_objectness_loss}
 [train] train_vote_loss: {train_vote_loss}
+[train] train_query_points_generation_loss: {train_query_points_generation_loss}
 [train] train_box_loss: {train_box_loss}
 [train] train_lang_acc: {train_lang_acc}
 [train] train_ref_acc: {train_ref_acc}
@@ -61,6 +63,7 @@ EPOCH_REPORT_TEMPLATE = """
 [val]   val_lang_loss: {val_lang_loss}
 [val]   val_objectness_loss: {val_objectness_loss}
 [val]   val_vote_loss: {val_vote_loss}
+[val]   val_query_points_generation_loss: {val_query_points_generation_loss}
 [val]   val_box_loss: {val_box_loss}
 [val]   val_lang_acc: {val_lang_acc}
 [val]   val_ref_acc: {val_ref_acc}
@@ -77,6 +80,7 @@ BEST_REPORT_TEMPLATE = """
 [loss] lang_loss: {lang_loss}
 [loss] objectness_loss: {objectness_loss}
 [loss] vote_loss: {vote_loss}
+[loss] query_points_generation_loss: {query_points_generation_loss}
 [loss] box_loss: {box_loss}
 [loss] lang_acc: {lang_acc}
 [sco.] ref_acc: {ref_acc}
@@ -118,6 +122,7 @@ class Solver():
             "lang_loss": float("inf"),
             "objectness_loss": float("inf"),
             "vote_loss": float("inf"),
+            "query_points_generation_loss": float("inf"),
             "box_loss": float("inf"),
             "lang_acc": -float("inf"),
             "ref_acc": -float("inf"),
@@ -234,6 +239,7 @@ class Solver():
             "lang_loss": [],
             "objectness_loss": [],
             "vote_loss": [],
+            "query_points_generation_loss": [],
             "box_loss": [],
             # scores (float, not torch.cuda.FloatTensor)
             "lang_acc": [],
@@ -293,6 +299,7 @@ class Solver():
         self._running_log["lang_loss"] = data_dict["lang_loss"]
         self._running_log["objectness_loss"] = data_dict["objectness_loss"]
         self._running_log["vote_loss"] = data_dict["vote_loss"] if not self.use_trans else 0.
+        self._running_log["query_points_generation_loss"] = data_dict["query_points_generation_loss"] if self.use_trans else 0.
         self._running_log["box_loss"] = data_dict["box_loss"]
         self._running_log["loss"] = data_dict["loss"]
 
@@ -337,6 +344,7 @@ class Solver():
                 "lang_loss": 0,
                 "objectness_loss": 0,
                 "vote_loss": 0,
+                "query_points_generation_loss": 0,
                 "box_loss": 0,
                 # acc
                 "lang_acc": 0,
@@ -376,8 +384,10 @@ class Solver():
             self.log[phase]["objectness_loss"].append(self._running_log["objectness_loss"].item())
             if self.use_trans:
                 self.log[phase]["vote_loss"].append(0.)
+                self.log[phase]["query_points_generation_loss"].append(self._running_log["query_points_generation_loss"].item())
             else:
                 self.log[phase]["vote_loss"].append(self._running_log["vote_loss"].item())
+                self.log[phase]["query_points_generation_loss"].append(0.)
             self.log[phase]["box_loss"].append(self._running_log["box_loss"].item())
 
             self.log[phase]["lang_acc"].append(self._running_log["lang_acc"])
@@ -427,6 +437,8 @@ class Solver():
                 self.best["objectness_loss"] = np.mean(self.log[phase]["objectness_loss"])
                 vote_loss = np.mean(self.log[phase]["vote_loss"]) if not self.use_trans else 0.
                 self.best["vote_loss"] = vote_loss
+                query_points_generation_loss = np.mean(self.log[phase]["query_points_generation_loss"]) if self.use_trans else 0.
+                self.best["query_points_generation_loss"] = query_points_generation_loss
                 self.best["box_loss"] = np.mean(self.log[phase]["box_loss"])
                 self.best["lang_acc"] = np.mean(self.log[phase]["lang_acc"])
                 self.best["ref_acc"] = np.mean(self.log[phase]["ref_acc"])
@@ -443,7 +455,7 @@ class Solver():
 
     def _dump_log(self, phase):
         log = {
-            "loss": ["loss", "ref_loss", "lang_loss", "objectness_loss", "vote_loss", "box_loss"],
+            "loss": ["loss", "ref_loss", "lang_loss", "objectness_loss", "vote_loss", "query_points_generation_loss", "box_loss"],
             "score": ["lang_acc", "ref_acc", "obj_acc", "pos_ratio", "neg_ratio", "iou_rate_0.25", "iou_rate_0.5"]
         }
         for key in log:
@@ -497,6 +509,7 @@ class Solver():
         # print report
 
         vote_loss = np.mean([v for v in self.log["train"]["vote_loss"]]) if not self.use_trans else 0.
+        query_points_generation_loss = np.mean([v for v in self.log["train"]["query_points_generation_loss"]]) if self.use_trans else 0.
 
         iter_report = self.__iter_report_template.format(
             epoch_id=epoch_id + 1,
@@ -507,6 +520,7 @@ class Solver():
             train_lang_loss=round(np.mean([v for v in self.log["train"]["lang_loss"]]), 5),
             train_objectness_loss=round(np.mean([v for v in self.log["train"]["objectness_loss"]]), 5),
             train_vote_loss=round(vote_loss, 5),
+            train_query_points_generation_loss=round(query_points_generation_loss, 5),
             train_box_loss=round(np.mean([v for v in self.log["train"]["box_loss"]]), 5),
             train_lang_acc=round(np.mean([v for v in self.log["train"]["lang_acc"]]), 5),
             train_ref_acc=round(np.mean([v for v in self.log["train"]["ref_acc"]]), 5),
@@ -532,12 +546,16 @@ class Solver():
         train_vote_loss = np.mean([v for v in self.log["train"]["vote_loss"]]) if not self.use_trans else 0.
         val_vote_loss = np.mean([v for v in self.log["val"]["vote_loss"]]) if not self.use_trans else 0.
 
+        train_query_points_generation_loss = np.mean([v for v in self.log["train"]["query_points_generation_loss"]]) if self.use_trans else 0.
+        val_query_points_generation_loss = np.mean([v for v in self.log["val"]["query_points_generation_loss"]]) if self.use_trans else 0.
+
         epoch_report = self.__epoch_report_template.format(
             train_loss=round(np.mean([v for v in self.log["train"]["loss"]]), 5),
             train_ref_loss=round(np.mean([v for v in self.log["train"]["ref_loss"]]), 5),
             train_lang_loss=round(np.mean([v for v in self.log["train"]["lang_loss"]]), 5),
             train_objectness_loss=round(np.mean([v for v in self.log["train"]["objectness_loss"]]), 5),
             train_vote_loss=round(train_vote_loss, 5),
+            train_query_points_generation_loss=round(train_query_points_generation_loss, 5),
             train_box_loss=round(np.mean([v for v in self.log["train"]["box_loss"]]), 5),
             train_lang_acc=round(np.mean([v for v in self.log["train"]["lang_acc"]]), 5),
             train_ref_acc=round(np.mean([v for v in self.log["train"]["ref_acc"]]), 5),
@@ -551,6 +569,7 @@ class Solver():
             val_lang_loss=round(np.mean([v for v in self.log["val"]["lang_loss"]]), 5),
             val_objectness_loss=round(np.mean([v for v in self.log["val"]["objectness_loss"]]), 5),
             val_vote_loss=round(val_vote_loss, 5),
+            val_query_points_generation_loss=round(val_query_points_generation_loss, 5),
             val_box_loss=round(np.mean([v for v in self.log["val"]["box_loss"]]), 5),
             val_lang_acc=round(np.mean([v for v in self.log["val"]["lang_acc"]]), 5),
             val_ref_acc=round(np.mean([v for v in self.log["val"]["ref_acc"]]), 5),
@@ -571,6 +590,7 @@ class Solver():
             lang_loss=round(self.best["lang_loss"], 5),
             objectness_loss=round(self.best["objectness_loss"], 5),
             vote_loss=round(self.best["vote_loss"], 5),
+            query_points_generation_loss=round(self.best["query_points_generation_loss"], 5),
             box_loss=round(self.best["box_loss"], 5),
             lang_acc=round(self.best["lang_acc"], 5),
             ref_acc=round(self.best["ref_acc"], 5),
