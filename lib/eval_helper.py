@@ -42,7 +42,7 @@ def construct_bbox_corners(center, box_size):
 
     return corners_3d
 
-def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle=False, use_cat_rand=False, use_best=False, post_processing=None):
+def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle=False, use_cat_rand=False, use_best=False, post_processing=None, use_trans=False):
     """ Loss functions
 
     Args:
@@ -57,8 +57,10 @@ def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle
 
     batch_size, num_words, _ = data_dict["lang_feat"].shape
 
-
-    objectness_preds_batch = torch.argmax(data_dict['objectness_scores'], 2).long()
+    if use_trans:
+        objectness_preds_batch = (data_dict['objectness_scores'] > 0).squeeze().long()
+    else:
+        objectness_preds_batch = torch.argmax(data_dict['objectness_scores'], 2).long()
     objectness_labels_batch = data_dict['objectness_label'].long()
 
     if post_processing:
@@ -214,7 +216,10 @@ def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle
 
     # --------------------------------------------
     # Some other statistics
-    obj_pred_val = torch.argmax(data_dict['objectness_scores'], 2) # B,K
+    if use_trans:
+        obj_pred_val = (data_dict['objectness_scores'] > 0).squeeze().long() # B,K
+    else:
+        obj_pred_val = torch.argmax(data_dict['objectness_scores'], 2) # B,K
     obj_acc = torch.sum((obj_pred_val==data_dict['objectness_label'].long()).float()*data_dict['objectness_mask'])/(torch.sum(data_dict['objectness_mask'])+1e-6)
     data_dict['obj_acc'] = obj_acc
     # detection semantic classification

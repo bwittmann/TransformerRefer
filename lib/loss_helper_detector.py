@@ -102,7 +102,7 @@ def compute_objectness_loss_based_on_query_points(end_points, num_decoder_layers
         seed_instance_label = torch.gather(point_instance_label, 1, seed_inds)  # B,num_seed
         query_points_instance_label = torch.gather(seed_instance_label, 1, query_points_sample_inds)  # B,query_points
 
-        # TODO: Only ones? Does this make sense?
+        # TODO: Only ones? Does this make sense? -> yes, it means we want to have all objectness predictions in the loss
         objectness_mask = torch.ones((B, K)).cuda()
 
         # Set assignment
@@ -242,9 +242,9 @@ def compute_box_and_sem_cls_loss(end_points, config, num_decoder_layers,
             size_label_one_hot = torch.cuda.FloatTensor(batch_size, size_class_label.shape[1], num_size_cluster).zero_()
             size_label_one_hot.scatter_(2, size_class_label.unsqueeze(-1),
                                         1)  # src==1 so it's *one-hot* (B,K,num_size_cluster)
-            size_label_one_hot_tiled = size_label_one_hot.unsqueeze(-1).repeat(1, 1, 1, 3)  # (B,K,num_size_cluster,3)
+            size_label_one_hot_tiled = size_label_one_hot.unsqueeze(-1).repeat(1, 1, 1, 3).contiguous()  # (B,K,num_size_cluster,3)
             predicted_size_residual_normalized = torch.sum(
-                end_points[f'{prefix}size_residuals_normalized'] * size_label_one_hot_tiled,
+                end_points[f'{prefix}size_residuals_normalized'].contiguous() * size_label_one_hot_tiled,
                 2)  # (B,K,3)
 
             mean_size_arr_expanded = torch.from_numpy(mean_size_arr.astype(np.float32)).cuda().unsqueeze(0).unsqueeze(
@@ -438,7 +438,7 @@ def get_loss_detector(end_points, config, num_decoder_layers,
     loss = query_points_generator_loss_coef * query_points_generation_loss + \
            1.0 / (num_decoder_layers + 1) * \
            (obj_loss_coef * objectness_loss_sum + box_loss_coef * box_loss_sum + sem_cls_loss_coef * sem_cls_loss_sum) + \
-            0.1 * ref_loss
+            0.1 * ref_loss + 0.1 * end_points["lang_loss"]
 
     loss *= 10
 

@@ -88,7 +88,7 @@ BEST_REPORT_TEMPLATE = """
 class Solver():
     def __init__(self, model, config, dataloader, optimizer, stamp, val_step=10, 
     detection=True, reference=True, use_lang_classifier=True, use_trans=False,
-    lr_decay_step=None, lr_decay_rate=None, bn_decay_step=None, bn_decay_rate=None):
+    lr_decay_step=None, lr_decay_rate=None, bn_decay_step=None, bn_decay_rate=None, no_validation=True):
 
         self.epoch = 0                    # set in __call__
         self.verbose = 0                  # set in __call__
@@ -98,6 +98,7 @@ class Solver():
         self.dataloader = dataloader
         self.optimizer = optimizer
         self.stamp = stamp
+        self.no_validation = no_validation
         self.val_step = val_step
 
         self.detection = detection
@@ -291,7 +292,7 @@ class Solver():
         self._running_log["ref_loss"] = data_dict["ref_loss"]
         self._running_log["lang_loss"] = data_dict["lang_loss"]
         self._running_log["objectness_loss"] = data_dict["objectness_loss"]
-        #self._running_log["vote_loss"] = data_dict["vote_loss"] # TODO: Think about.
+        self._running_log["vote_loss"] = data_dict["vote_loss"] if not self.use_trans else 0.
         self._running_log["box_loss"] = data_dict["box_loss"]
         self._running_log["loss"] = data_dict["loss"]
 
@@ -300,7 +301,8 @@ class Solver():
             data_dict=data_dict,
             config=self.config,
             reference=self.reference,
-            use_lang_classifier=self.use_lang_classifier
+            use_lang_classifier=self.use_lang_classifier,
+            use_trans=self.use_trans
         )
 
         # dump
@@ -372,7 +374,10 @@ class Solver():
             self.log[phase]["ref_loss"].append(self._running_log["ref_loss"].item())
             self.log[phase]["lang_loss"].append(self._running_log["lang_loss"].item())
             self.log[phase]["objectness_loss"].append(self._running_log["objectness_loss"].item())
-            #self.log[phase]["vote_loss"].append(self._running_log["vote_loss"].item()) # TODO
+            if self.use_trans:
+                self.log[phase]["vote_loss"].append(0.)
+            else:
+                self.log[phase]["vote_loss"].append(self._running_log["vote_loss"].item())
             self.log[phase]["box_loss"].append(self._running_log["box_loss"].item())
 
             self.log[phase]["lang_acc"].append(self._running_log["lang_acc"])
@@ -394,7 +399,7 @@ class Solver():
                     self._train_report(epoch_id)
 
                 # evaluation
-                if False: #self._global_iter_id % self.val_step == 0: TODO
+                if (not self.no_validation) and self._global_iter_id % self.val_step == 0:
                     print("evaluating...")
                     # val
                     self._feed(self.dataloader["val"], "val", epoch_id)
@@ -420,7 +425,8 @@ class Solver():
                 self.best["ref_loss"] = np.mean(self.log[phase]["ref_loss"])
                 self.best["lang_loss"] = np.mean(self.log[phase]["lang_loss"])
                 self.best["objectness_loss"] = np.mean(self.log[phase]["objectness_loss"])
-                #self.best["vote_loss"] = np.mean(self.log[phase]["vote_loss"]) # TODO
+                vote_loss = np.mean(self.log[phase]["vote_loss"]) if not self.use_trans else 0.
+                self.best["vote_loss"] = vote_loss
                 self.best["box_loss"] = np.mean(self.log[phase]["box_loss"])
                 self.best["lang_acc"] = np.mean(self.log[phase]["lang_acc"])
                 self.best["ref_acc"] = np.mean(self.log[phase]["ref_acc"])
@@ -442,11 +448,14 @@ class Solver():
         }
         for key in log:
             for item in log[key]:
-                self._log_writer[phase].add_scalar(
-                    "{}/{}".format(key, item),
-                    np.mean([v for v in self.log[phase][item]]),
-                    self._global_iter_id
-                )
+                values = np.array([v for v in self.log[phase][item]])
+                # remove nan
+                values = values[~np.isnan(values)]
+                log_value = -1.0
+                # if we have a non-empty array with no infinite
+                if len(values) and not sum(np.isinf(values)):
+                    log_value = np.nanmean(values)
+                self._log_writer[phase].add_scalar("{}/{}".format(key, item), log_value, self._global_iter_id)
 
     def _finish(self, epoch_id):
         # print best
@@ -486,6 +495,9 @@ class Solver():
         eta = decode_eta(eta_sec)
 
         # print report
+
+        vote_loss = np.mean([v for v in self.log["train"]["vote_loss"]]) if not self.use_trans else 0.
+
         iter_report = self.__iter_report_template.format(
             epoch_id=epoch_id + 1,
             iter_id=self._global_iter_id + 1,
@@ -494,7 +506,7 @@ class Solver():
             train_ref_loss=round(np.mean([v for v in self.log["train"]["ref_loss"]]), 5),
             train_lang_loss=round(np.mean([v for v in self.log["train"]["lang_loss"]]), 5),
             train_objectness_loss=round(np.mean([v for v in self.log["train"]["objectness_loss"]]), 5),
-            train_vote_loss=round(np.mean([v for v in self.log["train"]["vote_loss"]]), 5),
+            train_vote_loss=round(vote_loss, 5),
             train_box_loss=round(np.mean([v for v in self.log["train"]["box_loss"]]), 5),
             train_lang_acc=round(np.mean([v for v in self.log["train"]["lang_acc"]]), 5),
             train_ref_acc=round(np.mean([v for v in self.log["train"]["ref_acc"]]), 5),
@@ -516,12 +528,16 @@ class Solver():
 
     def _epoch_report(self, epoch_id):
         self._log("epoch [{}/{}] done...".format(epoch_id+1, self.epoch))
+
+        train_vote_loss = np.mean([v for v in self.log["train"]["vote_loss"]]) if not self.use_trans else 0.
+        val_vote_loss = np.mean([v for v in self.log["val"]["vote_loss"]]) if not self.use_trans else 0.
+
         epoch_report = self.__epoch_report_template.format(
             train_loss=round(np.mean([v for v in self.log["train"]["loss"]]), 5),
             train_ref_loss=round(np.mean([v for v in self.log["train"]["ref_loss"]]), 5),
             train_lang_loss=round(np.mean([v for v in self.log["train"]["lang_loss"]]), 5),
             train_objectness_loss=round(np.mean([v for v in self.log["train"]["objectness_loss"]]), 5),
-            train_vote_loss=round(np.mean([v for v in self.log["train"]["vote_loss"]]), 5),
+            train_vote_loss=round(train_vote_loss, 5),
             train_box_loss=round(np.mean([v for v in self.log["train"]["box_loss"]]), 5),
             train_lang_acc=round(np.mean([v for v in self.log["train"]["lang_acc"]]), 5),
             train_ref_acc=round(np.mean([v for v in self.log["train"]["ref_acc"]]), 5),
@@ -534,7 +550,7 @@ class Solver():
             val_ref_loss=round(np.mean([v for v in self.log["val"]["ref_loss"]]), 5),
             val_lang_loss=round(np.mean([v for v in self.log["val"]["lang_loss"]]), 5),
             val_objectness_loss=round(np.mean([v for v in self.log["val"]["objectness_loss"]]), 5),
-            val_vote_loss=round(np.mean([v for v in self.log["val"]["vote_loss"]]), 5),
+            val_vote_loss=round(val_vote_loss, 5),
             val_box_loss=round(np.mean([v for v in self.log["val"]["box_loss"]]), 5),
             val_lang_acc=round(np.mean([v for v in self.log["val"]["lang_acc"]]), 5),
             val_ref_acc=round(np.mean([v for v in self.log["val"]["ref_acc"]]), 5),

@@ -12,14 +12,16 @@ import numpy as np
 from torch.utils.data import DataLoader
 from datetime import datetime
 from copy import deepcopy
+from collections import OrderedDict
 
-sys.path.append(os.path.join(os.getcwd())) # HACK add the root folder
+sys.path.append(os.path.join(os.getcwd()))  # HACK add the root folder
 from data.scannet.model_util_scannet import ScannetDatasetConfig
 from lib.dataset import ScannetReferenceDataset
 from lib.solver import Solver
 from lib.config import CONF
 from models.refnet import RefNet
 from models.refnetV2 import RefNetV2
+from models.detector import GroupFreeDetector
 
 SCANREFER_TRAIN = json.load(open(os.path.join(CONF.PATH.DATA, "ScanRefer_filtered_train.json")))
 SCANREFER_VAL = json.load(open(os.path.join(CONF.PATH.DATA, "ScanRefer_filtered_val.json")))
@@ -27,24 +29,30 @@ SCANREFER_VAL = json.load(open(os.path.join(CONF.PATH.DATA, "ScanRefer_filtered_
 # constants
 DC = ScannetDatasetConfig()
 
+# TODO: for debugging warnings
+#np.seterr(all='raise')
+
+
 def get_dataloader(args, scanrefer, all_scene_list, split, config, augment):
     dataset = ScannetReferenceDataset(
-        scanrefer=scanrefer[split], 
-        scanrefer_all_scene=all_scene_list, 
-        split=split, 
-        num_points=args.num_points, 
+        scanrefer=scanrefer[split],
+        scanrefer_all_scene=all_scene_list,
+        split=split,
+        num_points=args.num_points,
         use_height=(not args.no_height),
-        use_color=args.use_color, 
-        use_normal=args.use_normal, 
+        use_color=args.use_color,
+        use_normal=args.use_normal,
         use_multiview=args.use_multiview
     )
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
     return dataset, dataloader
 
+
 def get_model(args):
     # initiate model
-    input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(not args.no_height)
+    input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(
+        not args.no_height)
 
     if args.transformer:
         model = RefNetV2(
@@ -58,7 +66,55 @@ def get_model(args):
             use_bidir=args.use_bidir
         )
 
-        # TODO: Add use_pretrained.
+        # pretrained transformer directly from GroupFreeDetector weights
+        if args.use_pretrained_transformer:
+            # load model
+            print("loading pretrained GroupFreeDetector...")
+            pretrained_detector = GroupFreeDetector(num_class=DC.num_class,
+                                                    num_heading_bin=DC.num_heading_bin,
+                                                    num_size_cluster=DC.num_size_cluster,
+                                                    mean_size_arr=DC.mean_size_arr,
+                                                    input_feature_dim=input_channels,
+                                                    num_proposal=args.num_proposals,
+                                                    self_position_embedding='loc_learned')
+
+            # model created with nn.DataParallel -> need to create new ordered dict and remove "module" prefix
+            checkpoint = torch.load(args.use_pretrained_transformer, map_location='cpu')  # map_location='cpu'
+            new_state_dict = OrderedDict()
+            for k, v in checkpoint['model'].items():
+                name = k[7:]  # remove `module.`
+                new_state_dict[name] = v
+            pretrained_detector.load_state_dict(new_state_dict)
+            del checkpoint
+            torch.cuda.empty_cache()
+
+            model.detector = pretrained_detector
+
+        # from pretrained scanrefer model with transformer
+        elif args.use_pretrained:
+            # load model
+            print("loading pretrained ScanRefer transformer detection...")
+            pretrained_model = RefNetV2(
+                num_class=DC.num_class,
+                num_heading_bin=DC.num_heading_bin,
+                num_size_cluster=DC.num_size_cluster,
+                mean_size_arr=DC.mean_size_arr,
+                num_proposal=args.num_proposals,
+                input_feature_dim=input_channels,
+                use_lang_classifier=(not args.no_lang_cls),
+                use_bidir=args.use_bidir
+            )
+
+            pretrained_path = os.path.join(CONF.PATH.OUTPUT, args.use_pretrained, "model_last.pth")
+            pretrained_model.load_state_dict(torch.load(pretrained_path), strict=False)
+
+            # mount
+            model.detector = pretrained_model.detector
+
+        if args.no_detection:
+            # freeze detector
+            for param in model.detector.parameters():
+                param.requires_grad = False
 
     else:
         model = RefNet(
@@ -104,21 +160,23 @@ def get_model(args):
                 # freeze voting
                 for param in model.vgen.parameters():
                     param.requires_grad = False
-                
+
                 # freeze detector
                 for param in model.proposal.parameters():
                     param.requires_grad = False
-    
+
     # to CUDA
     model = model.cuda()
 
     return model
+
 
 def get_num_params(model):
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     num_params = int(sum([np.prod(p.size()) for p in model_parameters]))
 
     return num_params
+
 
 def get_solver(args, dataloader):
     model = get_model(args)
@@ -133,7 +191,7 @@ def get_solver(args, dataloader):
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
     else:
         stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        if args.tag: stamp += "_"+args.tag.upper()
+        if args.tag: stamp += "_" + args.tag.upper()
         root = os.path.join(CONF.PATH.OUTPUT, stamp)
         os.makedirs(root, exist_ok=True)
 
@@ -144,14 +202,15 @@ def get_solver(args, dataloader):
     BN_DECAY_RATE = 0.5 if args.no_reference else None
 
     solver = Solver(
-        model=model, 
-        config=DC, 
-        dataloader=dataloader, 
-        optimizer=optimizer, 
-        stamp=stamp, 
+        model=model,
+        config=DC,
+        dataloader=dataloader,
+        optimizer=optimizer,
+        stamp=stamp,
+        no_validation=args.no_validation,
         val_step=args.val_step,
         detection=not args.no_detection,
-        reference=not args.no_reference, 
+        reference=not args.no_reference,
         use_lang_classifier=not args.no_lang_cls,
         use_trans=args.transformer,
         lr_decay_step=LR_DECAY_STEP,
@@ -163,11 +222,12 @@ def get_solver(args, dataloader):
 
     return solver, num_params, root
 
+
 def save_info(args, root, num_params, train_dataset, val_dataset):
     info = {}
     for key, value in vars(args).items():
         info[key] = value
-    
+
     info["num_train"] = len(train_dataset)
     info["num_val"] = len(val_dataset)
     info["num_train_scenes"] = len(train_dataset.scene_list)
@@ -177,10 +237,13 @@ def save_info(args, root, num_params, train_dataset, val_dataset):
     with open(os.path.join(root, "info.json"), "w") as f:
         json.dump(info, f, indent=4)
 
+
 def get_scannet_scene_list(split):
-    scene_list = sorted([line.rstrip() for line in open(os.path.join(CONF.PATH.SCANNET_META, "scannetv2_{}.txt".format(split)))])
+    scene_list = sorted(
+        [line.rstrip() for line in open(os.path.join(CONF.PATH.SCANNET_META, "scannetv2_{}.txt".format(split)))])
 
     return scene_list
+
 
 def get_scanrefer(scanrefer_train, scanrefer_val, num_scenes):
     if args.no_reference:
@@ -201,11 +264,11 @@ def get_scanrefer(scanrefer_train, scanrefer_val, num_scenes):
         # get initial scene list
         train_scene_list = sorted(list(set([data["scene_id"] for data in scanrefer_train])))
         val_scene_list = sorted(list(set([data["scene_id"] for data in scanrefer_val])))
-        if num_scenes == -1: 
+        if num_scenes == -1:
             num_scenes = len(train_scene_list)
         else:
             assert len(train_scene_list) >= num_scenes
-        
+
         # slice train_scene_list
         train_scene_list = train_scene_list[:num_scenes]
 
@@ -223,6 +286,7 @@ def get_scanrefer(scanrefer_train, scanrefer_val, num_scenes):
     print("train on {} samples and val on {} samples".format(len(new_scanrefer_train), len(new_scanrefer_val)))
 
     return new_scanrefer_train, new_scanrefer_val, all_scene_list
+
 
 def train(args):
     # init training dataset
@@ -273,9 +337,13 @@ if __name__ == "__main__":
     parser.add_argument("--use_normal", action="store_true", help="Use RGB color in input.")
     parser.add_argument("--use_multiview", action="store_true", help="Use multiview images.")
     parser.add_argument("--use_bidir", action="store_true", help="Use bi-directional GRU.")
-    parser.add_argument("--use_pretrained", type=str, help="Specify the folder name containing the pretrained detection module.")
+    parser.add_argument("--use_pretrained", type=str, help="Specify the folder name in outputs containing the "
+                                                           "pretrained model.")
+    parser.add_argument("--use_pretrained_transformer", type=str, help="Specify the absolute file path for pretrained "
+                                                           "GroupFreeDetector module.")
     parser.add_argument("--use_checkpoint", type=str, help="Specify the checkpoint root", default="")
     parser.add_argument("--transformer", action="store_true", help="Use the transformer for object detection")
+    parser.add_argument("--no_validation", action="store_true", help="Do NOT validate. Only for development debugging.")
     args = parser.parse_args()
 
     # setting
