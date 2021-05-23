@@ -10,14 +10,14 @@ import torch.nn as nn
 import numpy as np
 
 from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import StepLR, MultiStepLR
 from datetime import datetime
 from copy import deepcopy
 from collections import OrderedDict
-from lib.pointnet2.pytorch_utils import BNMomentumScheduler
-from torch.optim.lr_scheduler import StepLR, MultiStepLR
 
 sys.path.append(os.path.join(os.getcwd()))  # HACK add the root folder
 from data.scannet.model_util_scannet import ScannetDatasetConfig
+from lib.pointnet2.pytorch_utils import BNMomentumScheduler
 from lib.dataset import ScannetReferenceDataset
 from lib.solver import Solver
 from lib.config import CONF
