@@ -37,7 +37,7 @@ class GroupFreeDetector(nn.Module):
     def __init__(self, num_class, num_heading_bin, num_size_cluster, mean_size_arr,
                  input_feature_dim=0, width=1, bn_momentum=0.1, sync_bn=False, num_proposal=128, sampling='kps',
                  dropout=0.1, activation="relu", nhead=8, num_decoder_layers=6, dim_feedforward=2048,
-                 self_position_embedding='xyz_learned', cross_position_embedding='xyz_learned',
+                 self_position_embedding='loc_learned', cross_position_embedding='xyz_learned',
                  size_cls_agnostic=False):
         super().__init__()
 
@@ -229,7 +229,6 @@ class GroupFreeDetector(nn.Module):
         # Rename scores and residuals from last layer to match with ScanRefer
 
         # TODO: check if modification worked
-        #end_points['objectness_scores'] = end_points['objectness_scores_mask']
         end_points['objectness_scores'] = end_points['last_objectness_scores']
         end_points['center'] = end_points['last_center']
         end_points['heading_scores'] = end_points['last_heading_scores'] 

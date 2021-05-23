@@ -58,7 +58,7 @@ def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle
     batch_size, num_words, _ = data_dict["lang_feat"].shape
 
     if use_trans:
-        objectness_preds_batch = (data_dict['objectness_scores'] > 0).squeeze().long()
+        objectness_preds_batch = (data_dict['objectness_scores'] > 0).squeeze(2).long()
     else:
         objectness_preds_batch = torch.argmax(data_dict['objectness_scores'], 2).long()
     objectness_labels_batch = data_dict['objectness_label'].long()
@@ -217,7 +217,8 @@ def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle
     # --------------------------------------------
     # Some other statistics
     if use_trans:
-        obj_pred_val = (data_dict['objectness_scores'] > 0).squeeze().long() # B,K
+        # TODO: why does this obj_acc seem to go down when the objectness loss goes down?
+        obj_pred_val = (data_dict['objectness_scores'] > 0).squeeze(2).long() # B,K
     else:
         obj_pred_val = torch.argmax(data_dict['objectness_scores'], 2) # B,K
     obj_acc = torch.sum((obj_pred_val==data_dict['objectness_label'].long()).float()*data_dict['objectness_mask'])/(torch.sum(data_dict['objectness_mask'])+1e-6)
