@@ -102,7 +102,6 @@ def compute_objectness_loss_based_on_query_points(end_points, num_decoder_layers
         seed_instance_label = torch.gather(point_instance_label, 1, seed_inds)  # B,num_seed
         query_points_instance_label = torch.gather(seed_instance_label, 1, query_points_sample_inds)  # B,query_points
 
-        # TODO: Only ones? Does this make sense? -> yes, it means we want to have all objectness predictions in the loss
         objectness_mask = torch.ones((B, K)).cuda()
 
         # Set assignment

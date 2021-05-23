@@ -237,7 +237,6 @@ class GroupFreeDetector(nn.Module):
         end_points['size_scores'] = end_points['last_size_scores']
         end_points['size_residuals_normalized'] = end_points['last_size_residuals_normalized']
         end_points['sem_cls_scores'] = end_points['last_sem_cls_scores']
-
         end_points['heading_residuals'] = end_points['last_heading_residuals']
         end_points['size_residuals'] = end_points['last_size_residuals']
 

@@ -249,8 +249,8 @@ class ScannetReferenceDataset(Dataset):
         data_dict["load_time"] = time.time() - start
         # Added for transformer
         data_dict["size_gts"] = size_gts.astype(np.float32)
-        data_dict['point_obj_mask'] = point_obj_mask.astype(np.int64)
-        data_dict['point_instance_label'] = point_instance_label.astype(np.int64)
+        data_dict['point_obj_mask'] = point_obj_mask.astype(np.int64) # (N,) with 0/1 with 1 indicating the point is in one of the object's OBB.
+        data_dict['point_instance_label'] = point_instance_label.astype(np.int64) # (N,) with int values in -1,...,num_box, indicating which object the point belongs to, -1 means a backgound point.
 
         return data_dict
     
