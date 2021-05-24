@@ -452,7 +452,6 @@ def get_loss_detector(end_points,
         end_points["lang_loss"] = torch.zeros(1)[0].cuda()
 
     # means average proposal with prediction loss
-
     detection_loss = query_points_generator_loss_coef * query_points_generation_loss + \
                      (1.0 / (num_decoder_layers + 1)) * \
                      (obj_loss_coef * objectness_loss_sum +

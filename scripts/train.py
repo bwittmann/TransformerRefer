@@ -45,7 +45,8 @@ def get_dataloader(args, scanrefer, all_scene_list, split, config, augment):
         use_height=(not args.no_height),
         use_color=args.use_color,
         use_normal=args.use_normal,
-        use_multiview=args.use_multiview
+        use_multiview=args.use_multiview,
+        augment = augment
     )
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
@@ -374,7 +375,11 @@ def train(args):
     }
 
     # dataloader
-    train_dataset, train_dataloader = get_dataloader(args, scanrefer, all_scene_list, "train", DC, True)
+    if args.augment:
+        train_dataset, train_dataloader = get_dataloader(args, scanrefer, all_scene_list, "train", DC, True)
+    else:
+        train_dataset, train_dataloader = get_dataloader(args, scanrefer, all_scene_list, "train", DC, False)
+
     val_dataset, val_dataloader = get_dataloader(args, scanrefer, all_scene_list, "val", DC, False)
     dataloader = {
         "train": train_dataloader,
@@ -405,7 +410,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_scenes", type=int, default=-1, help="Number of scenes [default: -1]")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
     parser.add_argument("--no_height", action="store_true", help="Do NOT use height signal in input.")
-    parser.add_argument("--no_augment", action="store_true", help="Do NOT use height signal in input.")
+    parser.add_argument("--augment", action="store_true", help="Use data augmentation.") 
     parser.add_argument("--no_lang_cls", action="store_true", help="Do NOT use language classifier.")
     parser.add_argument("--no_detection", action="store_true", help="Do NOT train the detection module.")
     parser.add_argument("--no_reference", action="store_true", help="Do NOT train the localization module.")

@@ -375,7 +375,6 @@ class Solver():
                 self.log[phase]["vote_loss"].append(self._running_log["vote_loss"].item())
                 self.log[phase]["query_points_generation_loss"].append(0.)
             self.log[phase]["box_loss"].append(self._running_log["box_loss"].item())
-
             self.log[phase]["lang_acc"].append(self._running_log["lang_acc"])
             self.log[phase]["ref_acc"].append(self._running_log["ref_acc"])
             self.log[phase]["obj_acc"].append(self._running_log["obj_acc"])
@@ -493,7 +492,6 @@ class Solver():
         eta = decode_eta(eta_sec)
 
         # print report
-
         vote_loss = np.mean([v for v in self.log["train"]["vote_loss"]]) if not self.use_trans else 0.
         query_points_generation_loss = np.mean([v for v in self.log["train"]["query_points_generation_loss"]]) if self.use_trans else 0.
 

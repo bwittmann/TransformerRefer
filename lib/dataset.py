@@ -132,7 +132,7 @@ class ScannetReferenceDataset(Dataset):
             point_votes_mask = np.zeros(self.num_points)
 
             # ------------------------------- DATA AUGMENTATION ------------------------------        
-            if self.augment and not self.debug:
+            if self.augment:
                 if np.random.random() > 0.5:
                     # Flipping along the YZ plane
                     point_cloud[:,0] = -1 * point_cloud[:,0]
@@ -234,7 +234,6 @@ class ScannetReferenceDataset(Dataset):
         data_dict["vote_label_mask"] = point_votes_mask.astype(np.int64)
         data_dict["scan_idx"] = np.array(idx).astype(np.int64)
         data_dict["pcl_color"] = pcl_color
-        data_dict["ref_box_label"] = ref_box_label.astype(np.int64) # 0/1 reference labels for each object bbox
         data_dict["ref_box_label"] = ref_box_label.astype(np.int64) # 0/1 reference labels for each object bbox
         data_dict["ref_center_label"] = ref_center_label.astype(np.float32)
         data_dict["ref_heading_class_label"] = np.array(int(ref_heading_class_label)).astype(np.int64)
