@@ -6,6 +6,7 @@ data/scannet_train_images
 data/enet_features
 data/scannet/scannet_data
 data/scannet/scans
+data/scannet/scans_test
 data/scannet/scannetv2-labels.combined.tsv
 data/scannet/tasks
 data/scannetv2_enet.pth
@@ -24,7 +25,9 @@ lib/pointnet2/pointnet2.egg-info/
 
 # others
 lib/config.py
-outputs
+!outputs
+outputs/*
+!outputs/GFDetector
 demo
 docs
 LICENSE
