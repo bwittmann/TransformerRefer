@@ -55,18 +55,18 @@ class MatchModule(nn.Module):
         lang_feat = lang_feat.unsqueeze(1).repeat(1, self.num_proposals, 1) # batch_size, num_proposals, lang_size
 
         # fuse
-        features = torch.cat([features, lang_feat], dim=-1) # batch_size, num_proposals, 128 + lang_size
-        features = features.permute(0, 2, 1).contiguous() # batch_size, 128 + lang_size, num_proposals
+        ref_features = torch.cat([features, lang_feat], dim=-1) # batch_size, num_proposals, 128 + lang_size
+        ref_features = ref_features.permute(0, 2, 1).contiguous() # batch_size, 128 + lang_size, num_proposals
 
         # fuse features
-        features = self.fuse(features) # batch_size, hidden_size, num_proposals
+        ref_features = self.fuse(ref_features) # batch_size, hidden_size, num_proposals
         
         # mask out invalid proposals
         objectness_masks = objectness_masks.permute(0, 2, 1).contiguous() # batch_size, 1, num_proposals
-        features = features * objectness_masks
+        ref_features = ref_features * objectness_masks
 
         # match
-        confidences = self.match(features).squeeze(1) # batch_size, num_proposals
+        confidences = self.match(ref_features).squeeze(1) # batch_size, num_proposals
 
         data_dict["cluster_ref"] = confidences
 

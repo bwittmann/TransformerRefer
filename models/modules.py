@@ -9,7 +9,7 @@ import torch.nn.functional as F
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
 sys.path.append(BASE_DIR)
-sys.path.append(os.path.join(ROOT_DIR, 'pointnet2'))
+sys.path.append(os.path.join(ROOT_DIR, 'lib', 'pointnet2'))
 import pointnet2_utils
 
 
@@ -141,6 +141,7 @@ class PredictHead(nn.Module):
         num_proposal = features.shape[-1]
         net = F.relu(self.bn1(self.conv1(features)))
         net = F.relu(self.bn2(self.conv2(net)))
+
         # objectness
         objectness_scores = self.objectness_scores_head(net).transpose(2, 1)  # (batch_size, num_proposal, 1)
 

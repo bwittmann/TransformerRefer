@@ -87,6 +87,7 @@ BEST_REPORT_TEMPLATE = """
 [sco.] iou_rate_0.25: {iou_rate_25}, iou_rate_0.5: {iou_rate_5}
 """
 
+
 class Solver():
     def __init__(self, model, config, dataloader, optimizer, lr_scheduler, bn_scheduler, clip_norm, stamp, val_step=10,
                  detection=True, reference=True, use_lang_classifier=True, use_trans=False, trans_args=None,
@@ -166,7 +167,7 @@ class Solver():
         self.epoch = epoch
         self.verbose = verbose
         self._total_iter["train"] = len(self.dataloader["train"]) * epoch
-        self._total_iter["val"] = len(self.dataloader["val"]) * self.val_step
+        self._total_iter["val"] = 0 if self.no_validation else len(self.dataloader["val"]) * self.val_step
         
         for epoch_id in range(epoch):
             try:
@@ -182,8 +183,9 @@ class Solver():
 
                 # update lr scheduler
                 if self.lr_scheduler:
-                    print("update learning rate --> {}\n".format(self.lr_scheduler.get_lr()))
+                    print("previous learning rate --> {}\n".format(self.lr_scheduler.get_last_lr()))
                     self.lr_scheduler.step()
+                    print("updated learning rate --> {}\n".format(self.lr_scheduler.get_last_lr()))
 
                 # update bn scheduler
                 if self.bn_scheduler:
@@ -269,7 +271,8 @@ class Solver():
                 lang_loss_coef=self.trans_args["lang_loss_coef"],
                 detection=self.detection,
                 reference=self.reference,
-                use_lang_classifier=self.use_lang_classifier
+                use_lang_classifier=self.use_lang_classifier,
+                use_votenet_objectness=self.trans_args["use_votenet_objectness"]
             )
         else:
             _, data_dict = get_loss(

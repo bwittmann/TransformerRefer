@@ -36,7 +36,7 @@ DC = ScannetDatasetConfig()
 #np.seterr(all='raise')
 
 
-def get_dataloader(args, scanrefer, all_scene_list, split, config, augment):
+def get_dataloader(args, scanrefer, all_scene_list, split):
     dataset = ScannetReferenceDataset(
         scanrefer=scanrefer[split],
         scanrefer_all_scene=all_scene_list,
@@ -46,7 +46,7 @@ def get_dataloader(args, scanrefer, all_scene_list, split, config, augment):
         use_color=args.use_color,
         use_normal=args.use_normal,
         use_multiview=args.use_multiview,
-        augment = augment
+        augment=args.augment
     )
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
@@ -83,7 +83,7 @@ def get_model(args):
                                                     self_position_embedding='loc_learned')
 
             # model created with nn.DataParallel -> need to create new ordered dict and remove "module" prefix
-            checkpoint = torch.load(args.use_pretrained_transformer, map_location='cpu')  # map_location='cpu'
+            checkpoint = torch.load(args.use_pretrained_transformer, map_location='cpu')
             new_state_dict = OrderedDict()
             for k, v in checkpoint['model'].items():
                 name = k[7:]  # remove `module.`
@@ -97,7 +97,7 @@ def get_model(args):
         # from pretrained scanrefer model with transformer
         elif args.use_pretrained:
             # load model
-            print("loading pretrained ScanRefer transformer detection...")
+            print("loading pretrained ScanRefer with Group Free Transformer detection...")
             pretrained_model = RefNetV2(
                 num_class=DC.num_class,
                 num_heading_bin=DC.num_heading_bin,
@@ -136,7 +136,7 @@ def get_model(args):
         # trainable model
         if args.use_pretrained:
             # load model
-            print("loading pretrained VoteNet...")
+            print("loading pretrained ScanRefer with VoteNet detection...")
             pretrained_model = RefNet(
                 num_class=DC.num_class,
                 num_heading_bin=DC.num_heading_bin,
@@ -275,7 +275,8 @@ def get_solver(args, dataloader):
                   "heading_delta": args.t_heading_delta,
                   "detection_loss_coef": args.t_detection_loss_coef,
                   "ref_loss_coef": args.t_ref_loss_coef,
-                  "lang_loss_coef": args.t_lang_loss_coef}
+                  "lang_loss_coef": args.t_lang_loss_coef,
+                  "use_votenet_objectness": args.t_use_votenet_objectness}
 
     # get solver
     solver = Solver(
@@ -375,12 +376,8 @@ def train(args):
     }
 
     # dataloader
-    if args.augment:
-        train_dataset, train_dataloader = get_dataloader(args, scanrefer, all_scene_list, "train", DC, True)
-    else:
-        train_dataset, train_dataloader = get_dataloader(args, scanrefer, all_scene_list, "train", DC, False)
-
-    val_dataset, val_dataloader = get_dataloader(args, scanrefer, all_scene_list, "val", DC, False)
+    train_dataset, train_dataloader = get_dataloader(args, scanrefer, all_scene_list, "train")
+    val_dataset, val_dataloader = get_dataloader(args, scanrefer, all_scene_list, "val")
     dataloader = {
         "train": train_dataloader,
         "val": val_dataloader
@@ -440,6 +437,9 @@ if __name__ == "__main__":
     parser.add_argument('--t_size_delta', default=1.0, type=float, help='delta for smoothl1 loss in size loss')
     parser.add_argument('--t_heading_delta', default=1.0, type=float, help='delta for smoothl1 loss in heading loss')
 
+    parser.add_argument('--t_use_votenet_objectness', action="store_true", help='Use objectness as it is used by '
+                                                                                'VoteNet')
+
     parser.add_argument('--t_weight_decay', type=float, default=0.0005,
                         help='Optimization L2 weight decay [default: 0.0005]')
     parser.add_argument('--t_learning_rate', type=float, default=0.004,
@@ -449,10 +449,11 @@ if __name__ == "__main__":
     parser.add_argument('--t_lr_scheduler', type=str, default='step',
                         choices=["step", "cosine"], help="learning rate scheduler")
     parser.add_argument('--t_lr_decay_epochs', type=int, default=[280, 340], nargs='+',
-                        help='for step scheduler. where to decay lr, can be a list')
+                        help='for step scheduler. where to decay lr, can be a list (add multiple space-separated '
+                             'values)')
     parser.add_argument('--t_lr_decay_rate', type=float, default=0.1,
                         help='for step scheduler. decay rate for learning rate')
-    parser.add_argument('--t_warmup_epoch', type=int, default=-1, help='warmup epoch')
+    parser.add_argument('--t_warmup_epoch', type=int, default=0, help='warmup epoch')
     parser.add_argument('--t_warmup_multiplier', type=int, default=100, help='warmup multiplier')
     parser.add_argument('--t_clip_norm', default=0.1, type=float,
                         help='gradient clipping max norm')

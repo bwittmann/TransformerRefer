@@ -36,12 +36,12 @@ class RefNetV2(nn.Module):
 
         # ---------- TRANSFORMER ------------
         self.detector = GroupFreeDetector(num_class=num_class,
-                              num_heading_bin=num_heading_bin,
-                              num_size_cluster=num_size_cluster,
-                              mean_size_arr=mean_size_arr,
-                              input_feature_dim=input_feature_dim,
-                              num_proposal=num_proposal,
-                              self_position_embedding='loc_learned')
+                                          num_heading_bin=num_heading_bin,
+                                          num_size_cluster=num_size_cluster,
+                                          mean_size_arr=mean_size_arr,
+                                          input_feature_dim=input_feature_dim,
+                                          num_proposal=num_proposal,
+                                          self_position_embedding='loc_learned')
         
         if not no_reference:
             # --------- LANGUAGE ENCODING ---------

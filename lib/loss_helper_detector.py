@@ -8,8 +8,12 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
 sys.path.append(os.path.join(ROOT_DIR, 'utils'))
+from utils.nn_distance import nn_distance
 from lib.loss import smoothl1_loss, l1_loss, SigmoidFocalClassificationLoss, SoftmaxRankingLoss
 from utils.box_util import get_3d_box, get_3d_box_batch, box3d_iou, box3d_iou_batch
+
+FAR_THRESHOLD = 0.6
+NEAR_THRESHOLD = 0.3
 
 
 def compute_points_obj_cls_loss_hard_topk(end_points, topk):
@@ -76,55 +80,80 @@ def compute_points_obj_cls_loss_hard_topk(end_points, topk):
     return objectness_loss
 
 
-def compute_objectness_loss_based_on_query_points(end_points, num_decoder_layers):
+def compute_objectness_loss_based_on_query_points(end_points, num_decoder_layers, votenet_objectness=False):
     """ Compute objectness loss for the proposals.
     """
-
     if num_decoder_layers > 0:
         prefixes = ['proposal_'] + ['last_'] + [f'{i}head_' for i in range(num_decoder_layers - 1)]
     else:
         prefixes = ['proposal_']  # only proposal
 
     objectness_loss_sum = 0.0
+
+    # TODO: I find it kind of weird to set the objectness label of a bounding box as 1, just because the query point
+    #  is in an object. To me the VoteNet definition is much more intuitive: Objectness is high if the predicted
+    #  center is close to an actual center (and using a grey-zone)... Here the actual bounding box prediction might
+    #  be very bad (doesn't really envelop any object), but the query point is on an object, and thus the network is
+    #  told to learn a high objectness score.
+
+    # Associate proposal and GT objects
+    seed_inds = end_points['seed_inds'].long()  # B,num_seed in [0,num_points-1]
+    gt_center = end_points['center_label'][:, :, 0:3]  # B, K2, 3
+    query_points_sample_inds = end_points['query_points_sample_inds'].long()
+
+    B = seed_inds.shape[0]
+    K = query_points_sample_inds.shape[1]
+    K2 = gt_center.shape[1]
+
+    # get ground truths for each query point, for both objectness and instance label -> instance label / object
+    # assignment is just for later (saved in end_points), not relevant for this loss
+
+    seed_obj_gt = torch.gather(end_points['point_obj_mask'], 1, seed_inds)  # B,num_seed
+    query_points_obj_gt = torch.gather(seed_obj_gt, 1, query_points_sample_inds)  # B,query_points
+
+    seed_instance_label = torch.gather(end_points['point_instance_label'], 1, seed_inds)  # B,num_seed
+    query_points_instance_label = torch.gather(seed_instance_label, 1, query_points_sample_inds)  # B,query_points
+    # ground truth object assignment for the query points
+    query_points_object_assignment = query_points_instance_label  # (B,K) with values in 0,1,...,K2-1
+    query_points_object_assignment[query_points_object_assignment < 0] = K2 - 1  # set background points to the last gt bbox
+
+    total_num_proposal = query_points_obj_gt.shape[0] * query_points_obj_gt.shape[1]
+
     for prefix in prefixes:
-        # Associate proposal and GT objects
-        seed_inds = end_points['seed_inds'].long()  # B,num_seed in [0,num_points-1]
-        gt_center = end_points['center_label'][:, :, 0:3]  # B, K2, 3
-        query_points_sample_inds = end_points['query_points_sample_inds'].long()
+        if votenet_objectness:
+            # Associate proposal and GT objects by point-to-point distances
+            base_xyz = end_points[f'{prefix}base_xyz']
+            dist1, ind1, dist2, _ = nn_distance(base_xyz, gt_center)  # dist1: BxK, dist2: BxK2
+            object_assignment = ind1
 
-        B = seed_inds.shape[0]
-        K = query_points_sample_inds.shape[1]
-        K2 = gt_center.shape[1]
+            # Generate objectness label and mask
+            # objectness_label: 1 if pred object center is within NEAR_THRESHOLD of any GT object
+            # objectness_mask: 0 if pred object center is in gray zone (DONOTCARE), 1 otherwise
+            euclidean_dist1 = torch.sqrt(dist1 + 1e-6)
+            objectness_label = torch.zeros((B, K), dtype=torch.long).cuda()
+            objectness_mask = torch.zeros((B, K)).cuda()
+            objectness_label[euclidean_dist1 < NEAR_THRESHOLD] = 1
+            objectness_mask[euclidean_dist1 < NEAR_THRESHOLD] = 1
+            objectness_mask[euclidean_dist1 > FAR_THRESHOLD] = 1
 
-        # TODO: check if point_obj_mask is right -> scan refer has only some classes...
-        seed_obj_gt = torch.gather(end_points['point_obj_mask'], 1, seed_inds)  # B,num_seed
-        query_points_obj_gt = torch.gather(seed_obj_gt, 1, query_points_sample_inds)  # B, query_points
+            end_points[f'{prefix}objectness_mask'] = objectness_mask
+            end_points[f'{prefix}objectness_label'] = objectness_label
+            end_points[f'{prefix}object_assignment'] = object_assignment
+        else:
+            # Only ones? Does this make sense? -> it means we want to have all objectness predictions in the loss
+            objectness_mask = torch.ones((B, K)).cuda()
+            end_points[f'{prefix}objectness_mask'] = objectness_mask
 
-        point_instance_label = end_points['point_instance_label']  # B, num_points
-        seed_instance_label = torch.gather(point_instance_label, 1, seed_inds)  # B,num_seed
-        query_points_instance_label = torch.gather(seed_instance_label, 1, query_points_sample_inds)  # B,query_points
+            end_points[f'{prefix}objectness_label'] = query_points_obj_gt
+            end_points[f'{prefix}object_assignment'] = query_points_object_assignment
 
-        # TODO: Only ones? Does this make sense? -> it means we want to have all objectness predictions in the loss
-        objectness_mask = torch.ones((B, K)).cuda()
-        end_points[f'{prefix}objectness_mask'] = torch.ones((B, K)).cuda()
-
-        # Set assignment
-        object_assignment = query_points_instance_label  # (B,K) with values in 0,1,...,K2-1
-        # TODO: why do this? is this good for us?
-        object_assignment[object_assignment < 0] = K2 - 1  # set background points to the last gt bbox
-
-        end_points[f'{prefix}objectness_label'] = query_points_obj_gt
-        end_points[f'{prefix}object_assignment'] = object_assignment
-        total_num_proposal = query_points_obj_gt.shape[0] * query_points_obj_gt.shape[1]
-        end_points[f'{prefix}pos_ratio'] = \
-            torch.sum(query_points_obj_gt.float().cuda()) / float(total_num_proposal)
-        end_points[f'{prefix}neg_ratio'] = \
-            torch.sum(objectness_mask.float()) / float(total_num_proposal) - end_points[f'{prefix}pos_ratio']
+        end_points[f'{prefix}pos_ratio'] = torch.sum(end_points[f'{prefix}objectness_label'].float().cuda()) / float(total_num_proposal)
+        end_points[f'{prefix}neg_ratio'] = torch.sum(objectness_mask.float()) / float(total_num_proposal) - end_points[f'{prefix}pos_ratio']
 
         # Compute objectness loss
         objectness_scores = end_points[f'{prefix}objectness_scores']
         criterion = SigmoidFocalClassificationLoss()
-        cls_weights = objectness_mask.float()
+        cls_weights = objectness_mask.clone()
         cls_normalizer = cls_weights.sum(dim=1, keepdim=True).float()
         cls_weights /= torch.clamp(cls_normalizer, min=1.0)
         cls_loss_src = criterion(objectness_scores.transpose(2, 1).contiguous().view(B, K, 1),
@@ -180,22 +209,17 @@ def compute_box_and_sem_cls_loss(end_points, config, num_decoder_layers,
             raise NotImplementedError
 
         # Compute heading loss
-        heading_class_label = torch.gather(end_points['heading_class_label'], 1,
-                                           object_assignment)  # select (B,K) from (B,K2)
+        heading_class_label = torch.gather(end_points['heading_class_label'], 1, object_assignment)  # select (B,K) from (B,K2)
         criterion_heading_class = nn.CrossEntropyLoss(reduction='none')
-        heading_class_loss = criterion_heading_class(end_points[f'{prefix}heading_scores'].transpose(2, 1),
-                                                     heading_class_label)  # (B,K)
+        heading_class_loss = criterion_heading_class(end_points[f'{prefix}heading_scores'].transpose(2, 1), heading_class_label)  # (B,K)
         heading_class_loss = torch.sum(heading_class_loss * objectness_label) / (torch.sum(objectness_label) + 1e-6)
 
-        heading_residual_label = torch.gather(end_points['heading_residual_label'], 1,
-                                              object_assignment)  # select (B,K) from (B,K2)
+        heading_residual_label = torch.gather(end_points['heading_residual_label'], 1, object_assignment)  # select (B,K) from (B,K2)
         heading_residual_normalized_label = heading_residual_label / (np.pi / num_heading_bin)
 
         # Ref: https://discuss.pytorch.org/t/convert-int-into-one-hot-format/507/3
-        heading_label_one_hot = torch.cuda.FloatTensor(batch_size, heading_class_label.shape[1],
-                                                       num_heading_bin).zero_()
-        heading_label_one_hot.scatter_(2, heading_class_label.unsqueeze(-1),
-                                       1)  # src==1 so it's *one-hot* (B,K,num_heading_bin)
+        heading_label_one_hot = torch.cuda.FloatTensor(batch_size, heading_class_label.shape[1], num_heading_bin).zero_()
+        heading_label_one_hot.scatter_(2, heading_class_label.unsqueeze(-1), 1)  # src==1 so it's *one-hot* (B,K,num_heading_bin)
         heading_residual_normalized_error = torch.sum(
             end_points[f'{prefix}heading_residuals_normalized'] * heading_label_one_hot,
             -1) - heading_residual_normalized_label
@@ -312,14 +336,11 @@ def compute_reference_loss(data_dict, config):
     pred_ref = data_dict['cluster_ref'].detach().cpu().numpy()  # (B,)
     pred_center = data_dict['center'].detach().cpu().numpy()  # (B,K,3)
     pred_heading_class = torch.argmax(data_dict['heading_scores'], -1)  # B,num_proposal
-    pred_heading_residual = torch.gather(data_dict['heading_residuals'], 2,
-                                         pred_heading_class.unsqueeze(-1))  # B,num_proposal,1
+    pred_heading_residual = torch.gather(data_dict['heading_residuals'], 2, pred_heading_class.unsqueeze(-1))  # B,num_proposal,1
     pred_heading_class = pred_heading_class.detach().cpu().numpy()  # B,num_proposal
     pred_heading_residual = pred_heading_residual.squeeze(2).detach().cpu().numpy()  # B,num_proposal
     pred_size_class = torch.argmax(data_dict['size_scores'], -1)  # B,num_proposal
-    pred_size_residual = torch.gather(data_dict['size_residuals'], 2,
-                                      pred_size_class.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, 1,
-                                                                                         3))  # B,num_proposal,1,3
+    pred_size_residual = torch.gather(data_dict['size_residuals'], 2, pred_size_class.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, 1, 3))  # B,num_proposal,1,3
     pred_size_class = pred_size_class.detach().cpu().numpy()
     pred_size_residual = pred_size_residual.squeeze(2).detach().cpu().numpy()  # B,num_proposal,3
 
@@ -330,11 +351,10 @@ def compute_reference_loss(data_dict, config):
     gt_size_class = data_dict['ref_size_class_label'].cpu().numpy()  # B
     gt_size_residual = data_dict['ref_size_residual_label'].cpu().numpy()  # B,3
     # convert gt bbox parameters to bbox corners
-    gt_obb_batch = config.param2obb_batch(gt_center[:, 0:3], gt_heading_class, gt_heading_residual,
-                                          gt_size_class, gt_size_residual)
+    gt_obb_batch = config.param2obb_batch(gt_center[:, 0:3], gt_heading_class, gt_heading_residual, gt_size_class, gt_size_residual)
     gt_bbox_batch = get_3d_box_batch(gt_obb_batch[:, 3:6], gt_obb_batch[:, 6], gt_obb_batch[:, 0:3])
 
-    # compute the iou score for all predictd positive ref
+    # compute the iou score for all predicted positive ref
     batch_size, num_proposals = cluster_preds.shape
     labels = np.zeros((batch_size, num_proposals))
     for i in range(pred_ref.shape[0]):
@@ -381,19 +401,17 @@ def get_loss_detector(end_points,
                       size_cls_agnostic=False,
                       detection=True,
                       reference=True,
-                      use_lang_classifier=False):
+                      use_lang_classifier=False,
+                      use_votenet_objectness=False):
     """ Loss functions
     """
     if 'seeds_obj_cls_logits' in end_points.keys():
         query_points_generation_loss = compute_points_obj_cls_loss_hard_topk(end_points, query_points_obj_topk)
-
-        end_points['query_points_generation_loss'] = query_points_generation_loss
     else:
         query_points_generation_loss = 0.0
 
     # Obj loss
-    objectness_loss_sum, end_points = \
-        compute_objectness_loss_based_on_query_points(end_points, num_decoder_layers)
+    objectness_loss_sum, end_points = compute_objectness_loss_based_on_query_points(end_points, num_decoder_layers, votenet_objectness=use_votenet_objectness)
 
     end_points['sum_heads_objectness_loss'] = objectness_loss_sum
 

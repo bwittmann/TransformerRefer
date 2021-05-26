@@ -169,6 +169,7 @@ class GroupFreeDetector(nn.Module):
         elif self.sampling == 'kps':
             points_obj_cls_logits = self.points_obj_cls(features)  # (batch_size, 1, num_seed)
             end_points['seeds_obj_cls_logits'] = points_obj_cls_logits
+            # TODO: I think this sigmoid is not necessary, since it is a monotonically increasing function
             points_obj_cls_scores = torch.sigmoid(points_obj_cls_logits).squeeze(1)
             sample_inds = torch.topk(points_obj_cls_scores, self.num_proposal)[1].int()
             xyz, features, sample_inds = self.gsample_module(xyz, features, sample_inds)
@@ -232,12 +233,12 @@ class GroupFreeDetector(nn.Module):
         end_points['objectness_scores'] = end_points['last_objectness_scores']
         end_points['center'] = end_points['last_center']
         end_points['heading_scores'] = end_points['last_heading_scores'] 
-        end_points['heading_residuals_normalized'] = end_points['last_heading_residuals_normalized'] 
+        end_points['heading_residuals_normalized'] = end_points['last_heading_residuals_normalized']
+        end_points['heading_residuals'] = end_points['last_heading_residuals']
         end_points['size_scores'] = end_points['last_size_scores']
         end_points['size_residuals_normalized'] = end_points['last_size_residuals_normalized']
-        end_points['sem_cls_scores'] = end_points['last_sem_cls_scores']
-        end_points['heading_residuals'] = end_points['last_heading_residuals']
         end_points['size_residuals'] = end_points['last_size_residuals']
+        end_points['sem_cls_scores'] = end_points['last_sem_cls_scores']
 
         return end_points
 
