@@ -475,6 +475,7 @@ if __name__ == "__main__":
     parser.add_argument('--use_color', action='store_true', help='Use RGB color in input.')
     parser.add_argument('--use_normal', action='store_true', help='Use RGB color in input.')
     parser.add_argument('--use_multiview', action='store_true', help='Use multiview images.')
+    # TODO: add --transformer (and adjust the objectnesses above, in dump_results)
     args = parser.parse_args()
 
     # setting

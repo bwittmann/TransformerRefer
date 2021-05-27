@@ -49,8 +49,7 @@ def get_dataloader(args, scanrefer, all_scene_list, split, config):
 def get_model(args, config):
     # load model
     input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(not args.no_height)
-    
-    # TODO: Add weights of the transformer.
+
     if args.transformer:
         model = RefNetV2(
             num_class=config.num_class,
@@ -171,14 +170,11 @@ def eval_ref(args):
                     _, data = get_loss_detector(
                         end_points=data, 
                         config=DC,
-                        num_decoder_layers=6, 
-                        query_points_generator_loss_coef=0.8,
-                        obj_loss_coef=0.1,
-                        box_loss_coef=1,
-                        sem_cls_loss_coef=0.1,
+                        num_decoder_layers=6,
                         detection=True,
-                        reference=True, 
-                        use_lang_classifier=not args.no_lang_cls
+                        reference=True,
+                        use_lang_classifier=not args.no_lang_cls,
+                        use_votenet_objectness=args.use_votenet_objectness
                     )
                 else:
                     _, data = get_loss(
@@ -197,7 +193,8 @@ def eval_ref(args):
                     use_oracle=args.use_oracle,
                     use_cat_rand=args.use_cat_rand,
                     use_best=args.use_best,
-                    post_processing=POST_DICT
+                    post_processing=POST_DICT,
+                    use_trans=args.transformer
                 )
 
                 ref_acc += data["ref_acc"]
@@ -428,22 +425,34 @@ def eval_det(args):
         # feed
         with torch.no_grad():
             data = model(data)
-            _, data = get_loss(
-                data_dict=data, 
-                config=DC, 
-                detection=True,
-                reference=False
-            )
+            if args.transformer:
+                _, data = get_loss_detector(
+                    end_points=data,
+                    config=DC,
+                    num_decoder_layers=6,
+                    detection=True,
+                    reference=False,
+                    use_lang_classifier=not args.no_lang_cls,
+                    use_votenet_objectness=args.use_votenet_objectness
+                )
+            else:
+                _, data = get_loss(
+                    data_dict=data,
+                    config=DC,
+                    detection=True,
+                    reference=False
+                )
             data = get_eval(
                 data_dict=data, 
                 config=DC, 
                 reference=False,
-                post_processing=POST_DICT
+                post_processing=POST_DICT,
+                use_trans=args.transformer
             )
 
         sem_acc.append(data["sem_acc"].item())
 
-        batch_pred_map_cls = parse_predictions(data, POST_DICT) 
+        batch_pred_map_cls = parse_predictions(data, POST_DICT, args.transformer)
         batch_gt_map_cls = parse_groundtruths(data, POST_DICT) 
         for ap_calculator in AP_CALCULATOR_LIST:
             ap_calculator.step(batch_pred_map_cls, batch_gt_map_cls)
@@ -482,6 +491,7 @@ if __name__ == "__main__":
     parser.add_argument("--reference", action="store_true", help="evaluate the reference localization results")
     parser.add_argument("--detection", action="store_true", help="evaluate the object detection results")
     parser.add_argument("--transformer", action="store_true", help="Use the transformer for object detection")
+    parser.add_argument("--use_votenet_objectness", action="store_true", help="Use VoteNet's objectness labeling with transformer object detection")
     args = parser.parse_args()
 
     # setting

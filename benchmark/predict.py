@@ -22,6 +22,7 @@ from lib.ap_helper import APCalculator, parse_predictions, parse_groundtruths
 from lib.loss_helper import get_loss
 from lib.eval_helper import get_eval
 from models.refnet import RefNet
+from models.refnetV2 import RefNetV2
 from utils.box_util import get_3d_box
 from data.scannet.model_util_scannet import ScannetDatasetConfig
 
@@ -47,16 +48,28 @@ def get_dataloader(args, scanrefer, all_scene_list, split, config):
 def get_model(args, config):
     # load model
     input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(not args.no_height)
-    model = RefNet(
-        num_class=config.num_class,
-        num_heading_bin=config.num_heading_bin,
-        num_size_cluster=config.num_size_cluster,
-        mean_size_arr=config.mean_size_arr,
-        num_proposal=args.num_proposals,
-        input_feature_dim=input_channels,
-        use_lang_classifier=(not args.no_lang_cls),
-        use_bidir=args.use_bidir
-    ).cuda()
+    if args.transformer:
+        model = RefNetV2(
+            num_class=config.num_class,
+            num_heading_bin=config.num_heading_bin,
+            num_size_cluster=config.num_size_cluster,
+            mean_size_arr=config.mean_size_arr,
+            num_proposal=args.num_proposals,
+            input_feature_dim=input_channels,
+            use_lang_classifier=(not args.no_lang_cls),
+            use_bidir=args.use_bidir
+        ).cuda()
+    else:
+        model = RefNet(
+            num_class=config.num_class,
+            num_heading_bin=config.num_heading_bin,
+            num_size_cluster=config.num_size_cluster,
+            mean_size_arr=config.mean_size_arr,
+            num_proposal=args.num_proposals,
+            input_feature_dim=input_channels,
+            use_lang_classifier=(not args.no_lang_cls),
+            use_bidir=args.use_bidir
+        ).cuda()
 
     model_name = "model.pth"
     path = os.path.join(CONF.PATH.OUTPUT, args.folder, model_name)
@@ -120,10 +133,13 @@ def predict(args):
             reference=True
         )
 
-        objectness_preds_batch = torch.argmax(data_dict['objectness_scores'], 2).long()
+        if args.transformer:
+            objectness_preds_batch = (data_dict['objectness_scores'] > 0).squeeze(2).long()
+        else:
+            objectness_preds_batch = torch.argmax(data_dict['objectness_scores'], 2).long()
 
         if POST_DICT:
-            _ = parse_predictions(data_dict, POST_DICT)
+            _ = parse_predictions(data_dict, POST_DICT, args.transformer)
             nms_masks = torch.LongTensor(data_dict['pred_mask']).cuda()
 
             # construct valid mask
@@ -196,6 +212,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_normal", action="store_true", help="Use RGB color in input.")
     parser.add_argument("--use_multiview", action="store_true", help="Use multiview images.")
     parser.add_argument("--use_bidir", action="store_true", help="Use bi-directional GRU.")
+    parser.add_argument("--transformer", action="store_true", help="Use Group-Free Transformer based object detection.")
     args = parser.parse_args()
 
     # setting
