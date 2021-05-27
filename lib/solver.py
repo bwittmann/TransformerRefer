@@ -190,7 +190,7 @@ class Solver():
                 torch.save(self.model.state_dict(), os.path.join(model_root, "model_last.pth"))
 
                 # update lr scheduler
-                if self.lr_scheduler:
+                if self.lr_scheduler and 'Plateau' not in str(self.lr_scheduler):
                     prev_lr = self.lr_scheduler.get_last_lr()
                     self.lr_scheduler.step()
                     cur_lr = self.lr_scheduler.get_last_lr()
@@ -409,7 +409,7 @@ class Solver():
             self.log[phase]["pos_ratio"].append(self._running_log["pos_ratio"])
             self.log[phase]["neg_ratio"].append(self._running_log["neg_ratio"])
             self.log[phase]["iou_rate_0.25"].append(self._running_log["iou_rate_0.25"])
-            self.log[phase]["iou_rate_0.5"].append(self._running_log["iou_rate_0.5"])                
+            self.log[phase]["iou_rate_0.5"].append(self._running_log["iou_rate_0.5"]) 
 
             # report
             if phase == "train":
@@ -434,6 +434,10 @@ class Solver():
                 self._dump_log("train")
                 self._global_iter_id += 1
 
+        # make a step if ReduceLROnPlateau lr scheduler is in use
+        # TODO: use after validation -> validate more often
+        if self.lr_scheduler and 'Plateau' in str(self.lr_scheduler):
+            self.lr_scheduler.step(np.mean(self.log["train"]["loss"]))
 
         # check best
         if phase == "val":

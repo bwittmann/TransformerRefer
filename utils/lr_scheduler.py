@@ -1,5 +1,5 @@
 # noinspection PyProtectedMember
-from torch.optim.lr_scheduler import _LRScheduler, MultiStepLR, CosineAnnealingLR
+from torch.optim.lr_scheduler import _LRScheduler, MultiStepLR, CosineAnnealingLR, ReduceLROnPlateau
 
 
 # noinspection PyAttributeOutsideInit
@@ -62,7 +62,8 @@ class GradualWarmupScheduler(_LRScheduler):
         self.after_scheduler.load_state_dict(after_scheduler_state)
 
 
-def get_scheduler(optimizer, max_epoch, lr_scheduler, lr_decay_epochs, lr_decay_rate, warmup_epoch, warmup_multiplier):
+def get_scheduler(optimizer, max_epoch, lr_scheduler, lr_decay_epochs, lr_decay_rate, 
+                  warmup_epoch, warmup_multiplier, lr_patience, lr_threshold):
     if "cosine" in lr_scheduler:
         scheduler = CosineAnnealingLR(
             optimizer=optimizer,
@@ -75,6 +76,12 @@ def get_scheduler(optimizer, max_epoch, lr_scheduler, lr_decay_epochs, lr_decay_
             optimizer=optimizer,
             gamma=lr_decay_rate,
             milestones=[(m - warmup_epoch) for m in lr_decay_epochs])
+    elif 'plateau' in lr_scheduler:
+        scheduler = ReduceLROnPlateau(
+            optimizer=optimizer,
+            factor=lr_decay_rate,
+            patience=lr_patience,
+            threshold=lr_threshold)
     else:
         raise NotImplementedError(f"scheduler {lr_scheduler} not supported")
 

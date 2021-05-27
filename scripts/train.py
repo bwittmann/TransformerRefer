@@ -223,7 +223,7 @@ def get_solver(args, dataloader):
     if args.transformer:
         lr_scheduler = get_scheduler(optimizer, args.epoch, args.t_lr_scheduler,
                                      args.t_lr_decay_epochs, args.t_lr_decay_rate, args.t_warmup_epoch,
-                                     args.t_warmup_multiplier)
+                                     args.t_warmup_multiplier, args.t_lr_patience, args.t_lr_threshold)
         bn_scheduler = None
     else:
         # scheduler parameters for training solely the detection pipeline
@@ -415,48 +415,46 @@ if __name__ == "__main__":
     parser.add_argument("--use_normal", action="store_true", help="Use RGB color in input.")
     parser.add_argument("--use_multiview", action="store_true", help="Use multiview images.")
     parser.add_argument("--use_bidir", action="store_true", help="Use bi-directional GRU.")
-    parser.add_argument("--use_pretrained", type=str, help="Specify the folder name in outputs containing the "
-                                                           "pretrained model.")
-    parser.add_argument("--use_checkpoint", type=str, help="Specify the checkpoint root", default="")
+    parser.add_argument("--use_pretrained", type=str, help="Specify the folder name in outputs containing the pretrained model.")
+    parser.add_argument("--use_checkpoint", type=str, help="Specify the checkpoint root.", default="")
     parser.add_argument("--no_validation", action="store_true", help="Do NOT validate. Only for development debugging.")
 
     # transformer specific options
-    parser.add_argument("--transformer", action="store_true", help="Use the transformer for object detection")
+    parser.add_argument("--transformer", action="store_true", help="Use the transformer for object detection.")
     parser.add_argument("--use_pretrained_transformer", type=str, help="Specify the absolute file path for pretrained "
                                                                        "GroupFreeDetector module.")
 
-    parser.add_argument('--t_detection_loss_coef', default=1., type=float, help='Loss weight for detection loss')
-    parser.add_argument('--t_ref_loss_coef', default=0.1, type=float, help='Loss weight for ref loss')
-    parser.add_argument('--t_lang_loss_coef', default=0.1, type=float, help='Loss weight for lang loss')
+    parser.add_argument('--t_detection_loss_coef', default=1., type=float, help='Loss weight for detection loss.')
+    parser.add_argument('--t_ref_loss_coef', default=0.1, type=float, help='Loss weight for ref loss.')
+    parser.add_argument('--t_lang_loss_coef', default=0.1, type=float, help='Loss weight for lang loss.')
 
     parser.add_argument('--t_query_points_generator_loss_coef', default=0.8, type=float)
-    parser.add_argument('--t_obj_loss_coef', default=0.1, type=float, help='Loss weight for objectness loss')
-    parser.add_argument('--t_box_loss_coef', default=1, type=float, help='Loss weight for box loss')
-    parser.add_argument('--t_sem_cls_loss_coef', default=0.1, type=float, help='Loss weight for classification loss')
-    parser.add_argument('--t_center_delta', default=1.0, type=float, help='delta for smoothl1 loss in center loss')
-    parser.add_argument('--t_size_delta', default=1.0, type=float, help='delta for smoothl1 loss in size loss')
-    parser.add_argument('--t_heading_delta', default=1.0, type=float, help='delta for smoothl1 loss in heading loss')
+    parser.add_argument('--t_obj_loss_coef', default=0.1, type=float, help='Loss weight for objectness loss.')
+    parser.add_argument('--t_box_loss_coef', default=1, type=float, help='Loss weight for box loss.')
+    parser.add_argument('--t_sem_cls_loss_coef', default=0.1, type=float, help='Loss weight for classification loss.')
+    parser.add_argument('--t_center_delta', default=1.0, type=float, help='Delta for smoothl1 loss in center loss.')
+    parser.add_argument('--t_size_delta', default=1.0, type=float, help='Delta for smoothl1 loss in size loss.')
+    parser.add_argument('--t_heading_delta', default=1.0, type=float, help='Delta for smoothl1 loss in heading loss.')
 
     parser.add_argument('--t_use_votenet_objectness', action="store_true", help='Use objectness as it is used by '
-                                                                                'VoteNet')
+                                                                                'VoteNet.')
 
     parser.add_argument('--t_weight_decay', type=float, default=0.0005,
-                        help='Optimization L2 weight decay [default: 0.0005]')
+                        help='Optimization L2 weight decay [default: 0.0005].')
     parser.add_argument('--t_learning_rate', type=float, default=0.004,
-                        help='Initial learning rate for all except decoder [default: 0.004]')
+                        help='Initial learning rate for all except decoder [default: 0.004].')
     parser.add_argument('--t_decoder_learning_rate', type=float, default=0.0004,
-                        help='Initial learning rate for decoder [default: 0.0004]')
+                        help='Initial learning rate for decoder [default: 0.0004].')
     parser.add_argument('--t_lr_scheduler', type=str, default='step',
-                        choices=["step", "cosine"], help="learning rate scheduler")
+                        choices=["step", "cosine", "plateau"], help="Learning rate scheduler.")
     parser.add_argument('--t_lr_decay_epochs', type=int, default=[280, 340], nargs='+',
-                        help='for step scheduler. where to decay lr, can be a list (add multiple space-separated '
-                             'values)')
-    parser.add_argument('--t_lr_decay_rate', type=float, default=0.1,
-                        help='for step scheduler. decay rate for learning rate')
-    parser.add_argument('--t_warmup_epoch', type=int, default=0, help='warmup epoch')
-    parser.add_argument('--t_warmup_multiplier', type=int, default=100, help='warmup multiplier')
-    parser.add_argument('--t_clip_norm', default=0.1, type=float,
-                        help='gradient clipping max norm')
+                        help='For step scheduler. where to decay lr, can be a list (add multiple space-separated values).')
+    parser.add_argument('--t_lr_decay_rate', type=float, default=0.1, help='For step scheduler. decay rate for learning rate.')
+    parser.add_argument('--t_lr_patience', type=int, default=10, help='Patience for plateau lr scheduler.')
+    parser.add_argument('--t_lr_threshold', type=int, default=1e-4, help='Measures new optimum for plateau lr scheduler.')
+    parser.add_argument('--t_warmup_epoch', type=int, default=0, help='Warmup epoch.')
+    parser.add_argument('--t_warmup_multiplier', type=int, default=100, help='Warmup multiplier.')
+    parser.add_argument('--t_clip_norm', default=0.1, type=float, help='Gradient clipping max norm.')
 
     args = parser.parse_args()
 
