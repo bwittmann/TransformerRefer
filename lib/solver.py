@@ -188,15 +188,28 @@ class Solver():
 
                 # update lr scheduler
                 if self.lr_scheduler:
-                    print("previous learning rate --> {}\n".format(self.lr_scheduler.get_last_lr()))
+                    prev_lr = self.lr_scheduler.get_last_lr()
                     self.lr_scheduler.step()
-                    print("updated learning rate --> {}\n".format(self.lr_scheduler.get_last_lr()))
+                    cur_lr = self.lr_scheduler.get_last_lr()
+
+                    if prev_lr != cur_lr:
+                        print("updated learning rate from {} to {}\n".format(prev_lr, cur_lr))
+
+                # add lr to tensorboard
+                if self.use_trans:
+                    for param_group, info in zip(self.optimizer.param_groups, ['ref', 't_rest', 't_decoder']):
+                        self._log_writer["train"].add_scalar("lr/{}".format(info), param_group['lr'], self._global_iter_id)
+                else:
+                    self._log_writer["train"].add_scalar("lr", self.optimizer.param_groups[0]['lr'], self._global_iter_id)
 
                 # update bn scheduler
                 if self.bn_scheduler:
                     print("update batch normalization momentum --> {}\n".format(self.bn_scheduler.lmbd(self.bn_scheduler.last_epoch)))
                     self.bn_scheduler.step()
-                
+
+                    # add lambda to tensorboard
+                    self._log_writer["train"].add_scalar("bn_lambda", self.bn_scheduler.lmbd(self.bn_scheduler.last_epoch), self._global_iter_id)
+ 
             except KeyboardInterrupt:
                 # finish training
                 self._finish(epoch_id)
