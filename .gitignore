@@ -28,6 +28,8 @@ lib/config.py
 !outputs
 outputs/*
 !outputs/GFDetector
+!outputs/SR_VN_XYZ
+!outputs/SR_VN_XYZ_MULTIVIEW_NORMAL_LANGCLS
 demo
 docs
 LICENSE

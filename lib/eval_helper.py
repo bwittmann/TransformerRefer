@@ -214,6 +214,10 @@ def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle
 
     # store
     data_dict["ref_iou"] = ious
+
+    # TODO: how come the iou rates go down gradually and smooth after spikes? How can they be higher than ref_acc? How
+    #  can they be larger than zero when ref_acc is zero?
+
     data_dict["ref_iou_rate_0.25"] = np.array(ious)[np.array(ious) >= 0.25].shape[0] / np.array(ious).shape[0]
     data_dict["ref_iou_rate_0.5"] = np.array(ious)[np.array(ious) >= 0.5].shape[0] / np.array(ious).shape[0]
     data_dict["ref_multiple_mask"] = multiple
