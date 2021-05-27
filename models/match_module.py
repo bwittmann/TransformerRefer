@@ -44,7 +44,7 @@ class MatchModule(nn.Module):
         # unpack outputs from detection branch
         if self.use_trans:
             features = data_dict['last_features'].permute(0, 2, 1).contiguous()
-            # TODO: Wrong dimensions.
+            # predict head outputs objectness_score of shape: batch_size, num_proposals, 1
             objectness_masks = (data_dict['objectness_scores'] > 0).float() # batch_size, num_proposals, 1
         else:
             features = data_dict['aggregated_vote_features'] # batch_size, num_proposal, 128

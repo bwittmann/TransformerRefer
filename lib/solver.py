@@ -178,6 +178,9 @@ class Solver():
             try:
                 self._log("epoch {} starting...".format(epoch_id + 1))
 
+                # add epoch to tensorboard
+                self._log_writer["train"].add_scalar("epoch", epoch_id, self._global_iter_id)
+
                 # feed 
                 self._feed(self.dataloader["train"], "train", epoch_id)
 
@@ -369,7 +372,7 @@ class Solver():
             # load
             self.log[phase]["fetch"].append(data_dict["load_time"].sum().item())
 
-            with torch.autograd.set_detect_anomaly(True):   # TODO: Only for debugging slows down comp.
+            with torch.autograd.set_detect_anomaly(True):
                 # forward
                 start = time.time()
                 data_dict = self._forward(data_dict)
