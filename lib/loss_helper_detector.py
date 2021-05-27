@@ -413,8 +413,6 @@ def get_loss_detector(end_points,
     # Obj loss
     objectness_loss_sum, end_points = compute_objectness_loss_based_on_query_points(end_points, num_decoder_layers, votenet_objectness=use_votenet_objectness)
 
-    end_points['sum_heads_objectness_loss'] = objectness_loss_sum
-
     # Box loss and sem cls loss
     box_loss_sum, sem_cls_loss_sum, end_points = compute_box_and_sem_cls_loss(
         end_points, config, num_decoder_layers,
@@ -422,29 +420,33 @@ def get_loss_detector(end_points,
         size_loss_type=size_loss_type, size_delta=size_delta,
         heading_loss_type=heading_loss_type, heading_delta=heading_delta,
         size_cls_agnostic=size_cls_agnostic)
-    end_points['sum_heads_box_loss'] = box_loss_sum
-    end_points['sum_heads_sem_cls_loss'] = sem_cls_loss_sum
 
     if detection:
         end_points['query_points_generation_loss'] = query_points_generation_loss
         end_points['objectness_loss'] = end_points['last_objectness_loss']
+        end_points['sum_heads_objectness_loss'] = objectness_loss_sum
         end_points['center_loss'] = end_points['last_center_loss']
         end_points['heading_cls_loss'] = end_points['last_heading_cls_loss']
         end_points['heading_reg_loss'] = end_points['last_heading_reg_loss']
         end_points['size_cls_loss'] = end_points['last_size_cls_loss']
         end_points['size_reg_loss'] = end_points['last_size_reg_loss']
         end_points['sem_cls_loss'] = end_points['last_sem_cls_loss']
+        end_points['sum_heads_sem_cls_loss'] = sem_cls_loss_sum
         end_points['box_loss'] = end_points['last_box_loss']
+        end_points['sum_heads_box_loss'] = box_loss_sum
     else:
         end_points['query_points_generation_loss'] = torch.zeros(1)[0].cuda()
         end_points['objectness_loss'] = torch.zeros(1)[0].cuda()
+        end_points['sum_heads_objectness_loss'] = torch.zeros(1)[0].cuda()
         end_points['center_loss'] = torch.zeros(1)[0].cuda()
         end_points['heading_cls_loss'] = torch.zeros(1)[0].cuda()
         end_points['heading_reg_loss'] = torch.zeros(1)[0].cuda()
         end_points['size_cls_loss'] = torch.zeros(1)[0].cuda()
         end_points['size_reg_loss'] = torch.zeros(1)[0].cuda()
         end_points['sem_cls_loss'] = torch.zeros(1)[0].cuda()
+        end_points['sum_heads_sem_cls_loss'] = torch.zeros(1)[0].cuda()
         end_points['box_loss'] = torch.zeros(1)[0].cuda()
+        end_points['sum_heads_box_loss'] = torch.zeros(1)[0].cuda()
 
     if reference:
         # Reference loss
@@ -470,11 +472,11 @@ def get_loss_detector(end_points,
         end_points["lang_loss"] = torch.zeros(1)[0].cuda()
 
     # means average proposal with prediction loss
-    detection_loss = query_points_generator_loss_coef * query_points_generation_loss + \
+    detection_loss = query_points_generator_loss_coef * end_points['query_points_generation_loss'] + \
                      (1.0 / (num_decoder_layers + 1)) * \
-                     (obj_loss_coef * objectness_loss_sum +
-                      box_loss_coef * box_loss_sum +
-                      sem_cls_loss_coef * sem_cls_loss_sum)
+                     (obj_loss_coef * end_points['sum_heads_objectness_loss'] +
+                      box_loss_coef * end_points['sum_heads_box_loss'] +
+                      sem_cls_loss_coef * end_points['sum_heads_sem_cls_loss'])
 
     loss = detection_loss_coef * detection_loss + \
            ref_loss_coef * end_points["ref_loss"] + \
