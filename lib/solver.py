@@ -434,13 +434,12 @@ class Solver():
                 self._dump_log("train")
                 self._global_iter_id += 1
 
-        # make a step if ReduceLROnPlateau lr scheduler is in use
-        # TODO: use after validation -> validate more often
-        if self.lr_scheduler and 'Plateau' in str(self.lr_scheduler):
-            self.lr_scheduler.step(np.mean(self.log["train"]["loss"]))
-
         # check best
         if phase == "val":
+            # make a step if ReduceLROnPlateau lr scheduler is in use
+            if self.lr_scheduler and 'Plateau' in str(self.lr_scheduler):
+                self.lr_scheduler.step(np.mean(self.log["val"]["loss"]))
+
             cur_criterion = "iou_rate_0.5"
             cur_best = np.mean(self.log[phase][cur_criterion])
             if cur_best > self.best[cur_criterion]:
