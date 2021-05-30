@@ -115,11 +115,37 @@ def get_model(args):
             # mount
             model.detector = pretrained_model.detector
 
-        if args.no_detection:
-            # freeze detector
+        # freeze parts of the detector
+        if args.t_freeze_detection == 'all':
+            # freeze complete detector
+            for param in model.detector.parameters():
+                param.requires_grad = False
+        elif args.t_freeze_detection == 'up_to_pred_heads':
+            # freeze complete detector
             for param in model.detector.parameters():
                 param.requires_grad = False
 
+            # unfreeze up to prediction heads
+            for param in model.detector.prediction_heads.parameters():
+                param.requires_grad = True
+        elif args.t_freeze_detection == 'up_to_decoder_fc':
+            # freeze complete detector
+            for param in model.detector.parameters():
+                param.requires_grad = False
+
+            # unfreeze up to transfomer linear layers (linear1 and linear2)
+            for param in model.detector.prediction_heads.parameters():
+                param.requires_grad = True
+
+            for layer in range(6):
+                for param in model.detector.decoder[layer].linear1.parameters():
+                    param.requires_grad = True
+                for param in model.detector.decoder[layer].linear2.parameters():
+                    param.requires_grad = True
+        elif args.t_freeze_detection == 'only_backbone':
+            for param in model.detector.backbone_net.parameters():
+                param.requires_grad = False
+      
     else:
         model = RefNet(
             num_class=DC.num_class,
@@ -130,7 +156,7 @@ def get_model(args):
             num_proposal=args.num_proposals,
             use_lang_classifier=(not args.no_lang_cls),
             use_bidir=args.use_bidir,
-            no_reference=args.no_reference
+            no_reference=args.freeze_reference
         )
 
         # trainable model
@@ -156,7 +182,7 @@ def get_model(args):
             model.vgen = pretrained_model.vgen
             model.proposal = pretrained_model.proposal
 
-            if args.no_detection:
+            if args.freeze_detection:
                 # freeze pointnet++ backbone
                 for param in model.backbone_net.parameters():
                     param.requires_grad = False
@@ -227,10 +253,10 @@ def get_solver(args, dataloader):
         bn_scheduler = None
     else:
         # scheduler parameters for training solely the detection pipeline
-        lr_decay_step = [80, 120, 160] if args.no_reference else None
-        lr_decay_rate = 0.1 if args.no_reference else None
-        bn_decay_step = 20 if args.no_reference else None
-        bn_decay_rate = 0.5 if args.no_reference else None
+        lr_decay_step = [80, 120, 160] if args.freeze_reference else None
+        lr_decay_rate = 0.1 if args.freeze_reference else None
+        bn_decay_step = 20 if args.freeze_reference else None
+        bn_decay_rate = 0.5 if args.freeze_reference else None
 
         # lr scheduler
         if lr_decay_step and lr_decay_rate:
@@ -290,8 +316,8 @@ def get_solver(args, dataloader):
         stamp=stamp,
         no_validation=args.no_validation,
         val_step=args.val_step,
-        detection=not args.no_detection,
-        reference=not args.no_reference,
+        detection=not args.freeze_detection,
+        reference=not args.freeze_reference,
         use_lang_classifier=not args.no_lang_cls,
         use_trans=args.transformer,
         trans_args=trans_args
@@ -324,7 +350,7 @@ def get_scannet_scene_list(split):
 
 
 def get_scanrefer(scanrefer_train, scanrefer_val, num_scenes):
-    if args.no_reference:
+    if args.freeze_reference:
         train_scene_list = get_scannet_scene_list("train")
         new_scanrefer_train = []
         for scene_id in train_scene_list:
@@ -409,8 +435,8 @@ if __name__ == "__main__":
     parser.add_argument("--no_height", action="store_true", help="Do NOT use height signal in input.")
     parser.add_argument("--augment", action="store_true", help="Use data augmentation.") 
     parser.add_argument("--no_lang_cls", action="store_true", help="Do NOT use language classifier.")
-    parser.add_argument("--no_detection", action="store_true", help="Do NOT train the detection module.")
-    parser.add_argument("--no_reference", action="store_true", help="Do NOT train the localization module.")
+    parser.add_argument("--freeze_reference", action="store_true", help="Do NOT train the localization module.")
+    parser.add_argument("--freeze_detection", action="store_true", help="Do NOT train the detection module.")
     parser.add_argument("--use_color", action="store_true", help="Use RGB color in input.")
     parser.add_argument("--use_normal", action="store_true", help="Use RGB color in input.")
     parser.add_argument("--use_multiview", action="store_true", help="Use multiview images.")
@@ -423,6 +449,8 @@ if __name__ == "__main__":
     parser.add_argument("--transformer", action="store_true", help="Use the transformer for object detection.")
     parser.add_argument("--use_pretrained_transformer", type=str, help="Specify the absolute file path for pretrained "
                                                                        "GroupFreeDetector module.")
+    parser.add_argument("--t_freeze_detection", type=str, default="none",  help="Do NOT train parts of the trans. detection module.",
+                        choices=["none", "all", "up_to_pred_heads", "up_to_decoder_fc", "only_backbone"])                   
 
     parser.add_argument('--t_detection_loss_coef', default=1., type=float, help='Loss weight for detection loss.')
     parser.add_argument('--t_ref_loss_coef', default=0.1, type=float, help='Loss weight for ref loss.')
