@@ -84,15 +84,18 @@ def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle
     preds = preds.scatter_(1, cluster_preds, 1)
     cluster_preds = preds
     cluster_labels = data_dict["cluster_labels"].float()
+    # TODO: maybe don't mask the cluster labels -> even if seed point is not on object, the predicted reference box
+    #  might still be the one from the reference... (This will affect the ref_acc calculation and make it uncomparable
+    #  with previous runs) -> does't solve the problem, it must be somewhere else
     cluster_labels *= label_masks
 
     # compute classification scores
-    corrects = torch.sum((cluster_preds == 1) * (cluster_labels == 1), dim=1).float()
-    labels = torch.ones(corrects.shape[0]).cuda()
+    corrects = torch.sum((cluster_preds == 1) * (cluster_labels == 1)).float()
+    labels = torch.sum(cluster_labels == 1).float()
     ref_acc = corrects / (labels + 1e-8)
 
     # store
-    data_dict["ref_acc"] = ref_acc.cpu().numpy().tolist()
+    data_dict["ref_acc"] = ref_acc
 
     # compute localization metrics
     if use_best:
@@ -207,6 +210,8 @@ def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle
         others.append(flag)
 
     # lang
+    # TODO: another bug: validation language accuracy and loss are always better than training. train lang_acc converges
+    #  to 0.5, val to 1.0. There must be some kind of mistake there...
     if reference and use_lang_classifier:
         data_dict["lang_acc"] = (torch.argmax(data_dict['lang_scores'], 1) == data_dict["object_cat"]).float().mean()
     else:
@@ -215,8 +220,8 @@ def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle
     # store
     data_dict["ref_iou"] = ious
 
-    # TODO: how come the iou rates go down gradually and smooth after spikes? How can they be higher than ref_acc? How
-    #  can they be larger than zero when ref_acc is zero?
+    # TODO: how come sometimes the iou rates and/or ref acc go down gradually and smooth after spikes? How can the iou
+    #  rates be  higher than ref_acc? How can they be larger than zero when ref_acc is zero?
 
     data_dict["ref_iou_rate_0.25"] = np.array(ious)[np.array(ious) >= 0.25].shape[0] / np.array(ious).shape[0]
     data_dict["ref_iou_rate_0.5"] = np.array(ious)[np.array(ious) >= 0.5].shape[0] / np.array(ious).shape[0]

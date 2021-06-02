@@ -41,6 +41,12 @@ def softmax(x):
     return probs
 
 
+def sigmoid(x):
+    """ Numpy function for softmax """
+    s = 1 / (1 + np.exp(-x))
+    return s
+
+
 def parse_predictions(end_points, config_dict, transformer=False):
     """ Parse predictions to OBB parameters and suppress overlapping boxes
     
@@ -66,16 +72,15 @@ def parse_predictions(end_points, config_dict, transformer=False):
     pred_size_residual = torch.gather(end_points['size_residuals'], 2, pred_size_class.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, 1, 3))  # B,num_proposal,1,3
     pred_size_residual.squeeze_(2)
     pred_sem_cls = torch.argmax(end_points['sem_cls_scores'], -1)  # B,num_proposal
-    sem_cls_probs = softmax(end_points['sem_cls_scores'].detach().cpu().numpy())  # B,num_proposal,10
-    pred_sem_cls_prob = np.max(sem_cls_probs, -1)  # B,num_proposal
+    sem_cls_probs = softmax(end_points['sem_cls_scores'].detach().cpu().numpy())  # B,num_proposal,N_sem_class
 
     num_proposal = pred_center.shape[1]
     # Since we operate in upright_depth coord for points, while util functions
     # assume upright_camera coord.
     bsize = pred_center.shape[0]
     pred_corners_3d_upright_camera = np.zeros((bsize, num_proposal, 8, 3))
-    # pred_center_upright_camera = flip_axis_to_camera(pred_center.detach().cpu().numpy())
-    pred_center_upright_camera = pred_center.detach().cpu().numpy()
+    pred_center_upright_camera = flip_axis_to_camera(pred_center.detach().cpu().numpy())  # TODO: switched comment line
+    # pred_center_upright_camera = pred_center.detach().cpu().numpy()
     for i in range(bsize):
         for j in range(num_proposal):
             heading_angle = config_dict['dataset_config'].class2angle(
@@ -96,7 +101,7 @@ def parse_predictions(end_points, config_dict, transformer=False):
             pc = batch_pc[i, :, :]  # (N,3)
             for j in range(K):
                 box3d = pred_corners_3d_upright_camera[i, j, :, :]  # (8,3)
-                # box3d = flip_axis_to_depth(box3d)
+                box3d = flip_axis_to_depth(box3d)  # TODO: uncommented this line
                 pc_in_box, inds = extract_pc_in_box3d(pc, box3d)
                 if len(pc_in_box) < 5:
                     nonempty_box_mask[i, j] = 0
@@ -105,7 +110,7 @@ def parse_predictions(end_points, config_dict, transformer=False):
     # transformer outputs only one objectness score, while votenet has two - dim 0: no_object, dim 1: object
     obj_logits = end_points['objectness_scores'].detach().cpu().numpy()
     if transformer:
-        obj_prob = softmax(obj_logits)[:, :, 0]  # (B,K)
+        obj_prob = sigmoid(obj_logits)[:, :, 0]  # (B,K)
     else:
         obj_prob = softmax(obj_logits)[:, :, 1]  # (B,K)
     if not config_dict['use_3d_nms']:
@@ -124,7 +129,6 @@ def parse_predictions(end_points, config_dict, transformer=False):
                                  config_dict['nms_iou'], config_dict['use_old_type_nms'])
             assert (len(pick) > 0)
             pred_mask[i, nonempty_box_inds[pick]] = 1
-        end_points['pred_mask'] = pred_mask
         # ---------- NMS output: pred_mask in (B,K) -----------
     elif config_dict['use_3d_nms'] and (not config_dict['cls_nms']):
         # ---------- NMS input: pred_with_prob in (B,K,7) -----------
@@ -144,7 +148,6 @@ def parse_predictions(end_points, config_dict, transformer=False):
                                  config_dict['nms_iou'], config_dict['use_old_type_nms'])
             assert (len(pick) > 0)
             pred_mask[i, nonempty_box_inds[pick]] = 1
-        end_points['pred_mask'] = pred_mask
         # ---------- NMS output: pred_mask in (B,K) -----------
     elif config_dict['use_3d_nms'] and config_dict['cls_nms']:
         # ---------- NMS input: pred_with_prob in (B,K,8) -----------
@@ -163,10 +166,12 @@ def parse_predictions(end_points, config_dict, transformer=False):
             nonempty_box_inds = np.where(nonempty_box_mask[i, :] == 1)[0]
             pick = nms_3d_faster_samecls(boxes_3d_with_prob[nonempty_box_mask[i, :] == 1, :],
                                          config_dict['nms_iou'], config_dict['use_old_type_nms'])
-            assert (len(pick) > 0)
-            pred_mask[i, nonempty_box_inds[pick]] = 1
-        end_points['pred_mask'] = pred_mask
+            # assert (len(pick) > 0)
+            if len(pick) > 0:
+                pred_mask[i, nonempty_box_inds[pick]] = 1
         # ---------- NMS output: pred_mask in (B,K) -----------
+
+    end_points['pred_mask'] = pred_mask
 
     batch_pred_map_cls = []  # a list (len: batch_size) of list (len: num of predictions per sample) of tuples of pred_cls, pred_box and conf (0-1)
     for i in range(bsize):
@@ -214,8 +219,8 @@ def parse_groundtruths(end_points, config_dict):
 
     K2 = center_label.shape[1]  # K2==MAX_NUM_OBJ
     gt_corners_3d_upright_camera = np.zeros((bsize, K2, 8, 3))
-    # gt_center_upright_camera = flip_axis_to_camera(center_label[:,:,0:3].detach().cpu().numpy())
-    gt_center_upright_camera = center_label[:, :, 0:3].detach().cpu().numpy()
+    gt_center_upright_camera = flip_axis_to_camera(center_label[:,:,0:3].detach().cpu().numpy())  # TODO: switched comment line
+    # gt_center_upright_camera = center_label[:, :, 0:3].detach().cpu().numpy()
     for i in range(bsize):
         for j in range(K2):
             if box_label_mask[i, j] == 0: continue

@@ -325,7 +325,7 @@ class Solver():
 
         # dump
         self._running_log["lang_acc"] = data_dict["lang_acc"].item()
-        self._running_log["ref_acc"] = np.mean(data_dict["ref_acc"])
+        self._running_log["ref_acc"] = data_dict["ref_acc"].item()
         self._running_log["obj_acc"] = data_dict["obj_acc"].item()
         self._running_log["sem_acc"] = data_dict["sem_acc"].item()
         self._running_log["pos_ratio"] = data_dict["pos_ratio"].item()
