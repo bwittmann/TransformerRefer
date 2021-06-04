@@ -7,7 +7,6 @@ import os
 import sys
 import time
 import h5py
-import json
 import pickle
 import numpy as np
 import multiprocessing as mp
@@ -16,7 +15,7 @@ from torch.utils.data import Dataset
 sys.path.append(os.path.join(os.getcwd(), "lib"))  # HACK add the lib folder
 from lib.config import CONF
 from utils.pc_utils import random_sampling, rotx, roty, rotz
-from data.scannet.model_util_scannet import rotate_aligned_boxes, ScannetDatasetConfig, rotate_aligned_boxes_along_axis
+from data.scannet.model_util_scannet import ScannetDatasetConfig, rotate_aligned_boxes_along_axis
 
 # data setting
 DC = ScannetDatasetConfig()

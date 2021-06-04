@@ -1,29 +1,21 @@
 import os
 import sys
 import json
-import h5py
 import argparse
-import importlib
 import torch
-import torch.optim as optim
-import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from torch.utils.data import DataLoader
-from datetime import datetime
 from tqdm import tqdm
-from shutil import copyfile
 from plyfile import PlyData, PlyElement
 
 sys.path.append(os.path.join(os.getcwd())) # HACK add the root folder
-from utils.pc_utils import write_ply_rgb, write_oriented_bbox
+from utils.pc_utils import write_ply_rgb
 from utils.box_util import get_3d_box, box3d_iou
-from models.refnet import RefNet
+from models.refnetV2 import RefNetV2
 from data.scannet.model_util_scannet import ScannetDatasetConfig
 from lib.dataset import ScannetReferenceDataset
-from lib.solver import Solver
-from lib.ap_helper import APCalculator, parse_predictions, parse_groundtruths
-from lib.loss_helper import get_loss
+from lib.loss_helper_detector import get_loss_detector
 from lib.eval_helper import get_eval
 from lib.config import CONF
 
@@ -441,6 +433,7 @@ def visualize(args):
         # feed
         data = model(data)
         # _, data = get_loss(data, DC, True, True, POST_DICT)
+        # TODO: implement transformer loss
         _, data = get_loss(
             data_dict=data, 
             config=DC, 

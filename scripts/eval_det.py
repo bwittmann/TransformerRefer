@@ -16,9 +16,7 @@ sys.path.append(os.path.join(os.getcwd()))  # HACK add the root folder
 from lib.config import CONF
 from lib.dataset import ScannetReferenceDataset
 from lib.ap_helper import APCalculator, parse_predictions, parse_groundtruths
-from lib.loss_helper import get_loss
 from lib.loss_helper_detector import get_loss_detector
-from models.refnet import RefNet
 from models.refnetV2 import RefNetV2
 from utils.logger_for_det_eval import setup_logger
 from data.scannet.model_util_scannet import ScannetDatasetConfig
@@ -68,28 +66,16 @@ def get_model(args, config):
     input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(
         not args.no_height)
 
-    if args.transformer:
-        model = RefNetV2(
-            num_class=config.num_class,
-            num_heading_bin=config.num_heading_bin,
-            num_size_cluster=config.num_size_cluster,
-            mean_size_arr=config.mean_size_arr,
-            num_proposal=args.num_proposals,
-            input_feature_dim=input_channels,
-            use_lang_classifier=(not args.no_lang_cls),
-            use_bidir=args.use_bidir
-        ).cuda()
-    else:
-        model = RefNet(
-            num_class=config.num_class,
-            num_heading_bin=config.num_heading_bin,
-            num_size_cluster=config.num_size_cluster,
-            mean_size_arr=config.mean_size_arr,
-            num_proposal=args.num_proposals,
-            input_feature_dim=input_channels,
-            use_lang_classifier=(not args.no_lang_cls),
-            use_bidir=args.use_bidir
-        ).cuda()
+    model = RefNetV2(
+        num_class=config.num_class,
+        num_heading_bin=config.num_heading_bin,
+        num_size_cluster=config.num_size_cluster,
+        mean_size_arr=config.mean_size_arr,
+        num_proposal=args.num_proposals,
+        input_feature_dim=input_channels,
+        use_lang_classifier=(not args.no_lang_cls),
+        use_bidir=args.use_bidir
+    ).cuda()
 
     model_name = "model.pth"
     path = os.path.join(CONF.PATH.OUTPUT, args.folder, model_name)
@@ -126,26 +112,19 @@ def evaluate_one_time(test_loader, DATASET_CONFIG, CONFIG_DICT, AP_IOU_THRESHOLD
             if key not in necessary_data_keys:
                 assert (key not in end_points)
             end_points[key] = batch_data_label[key]
-        if args.transformer:
-            _, end_points = get_loss_detector(
-                end_points=end_points,
-                config=DATASET_CONFIG,
-                num_decoder_layers=6,
-                detection=True,
-                reference=False,
-                use_lang_classifier=not args.no_lang_cls,
-                use_votenet_objectness=args.use_votenet_objectness
-            )
-        else:
-            _, end_points = get_loss(
-                data_dict=end_points,
-                config=DATASET_CONFIG,
-                detection=True,
-                reference=False
-            )
+
+        _, end_points = get_loss_detector(
+            end_points=end_points,
+            config=DATASET_CONFIG,
+            num_decoder_layers=6,
+            detection=True,
+            reference=False,
+            use_lang_classifier=not args.no_lang_cls,
+            use_votenet_objectness=args.use_votenet_objectness
+        )
 
         for prefix in prefixes:
-            batch_pred_map_cls = parse_predictions(end_points, CONFIG_DICT, args.transformer)
+            batch_pred_map_cls = parse_predictions(end_points, CONFIG_DICT)
             batch_gt_map_cls = parse_groundtruths(end_points, CONFIG_DICT)
             batch_pred_map_cls_dict[prefix].append(batch_pred_map_cls)
             batch_gt_map_cls_dict[prefix].append(batch_gt_map_cls)
@@ -268,7 +247,6 @@ def parse_option():
     parser.add_argument("--use_normal", action="store_true", help="Use RGB color in input.")
     parser.add_argument("--use_multiview", action="store_true", help="Use multiview images.")
     parser.add_argument("--use_bidir", action="store_true", help="Use bi-directional GRU.")
-    parser.add_argument("--transformer", action="store_true", help="Use the transformer for object detection")
     parser.add_argument("--use_votenet_objectness", action="store_true",
                         help="Use VoteNet's objectness labeling with transformer object detection")
 

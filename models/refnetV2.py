@@ -1,13 +1,8 @@
-import torch
 import torch.nn as nn
-import numpy as np
 import sys
 import os
 
 sys.path.append(os.path.join(os.getcwd(), "lib")) # HACK add the lib folder
-from models.backbone_module import Pointnet2Backbone
-from models.voting_module import VotingModule
-from models.proposal_module import ProposalModule
 from models.lang_module import LangModule
 from models.match_module import MatchModule
 from models.detector import GroupFreeDetector
@@ -51,7 +46,7 @@ class RefNetV2(nn.Module):
 
             # --------- PROPOSAL MATCHING ---------
             # Match the generated proposals and select the most confident ones
-            self.match = MatchModule(num_proposals=num_proposal, lang_size=(1 + int(self.use_bidir)) * hidden_size, use_trans=True)
+            self.match = MatchModule(num_proposals=num_proposal, lang_size=(1 + int(self.use_bidir)) * hidden_size)
 
     def forward(self, data_dict):
         """ Forward pass of the network

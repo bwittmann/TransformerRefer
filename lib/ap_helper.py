@@ -9,7 +9,7 @@ import numpy as np
 import torch
 
 sys.path.append(os.path.join(os.getcwd(), "lib"))  # HACK add the lib folder
-from utils.eval_det import eval_det_cls, eval_det_multiprocessing
+from utils.eval_det import eval_det_multiprocessing
 from utils.eval_det import get_iou_obb
 from utils.nms import nms_2d_faster, nms_3d_faster, nms_3d_faster_samecls
 from utils.box_util import get_3d_box
@@ -47,7 +47,7 @@ def sigmoid(x):
     return s
 
 
-def parse_predictions(end_points, config_dict, transformer=False):
+def parse_predictions(end_points, config_dict):
     """ Parse predictions to OBB parameters and suppress overlapping boxes
     
     Args:
@@ -109,10 +109,8 @@ def parse_predictions(end_points, config_dict, transformer=False):
 
     # transformer outputs only one objectness score, while votenet has two - dim 0: no_object, dim 1: object
     obj_logits = end_points['objectness_scores'].detach().cpu().numpy()
-    if transformer:
-        obj_prob = sigmoid(obj_logits)[:, :, 0]  # (B,K)
-    else:
-        obj_prob = softmax(obj_logits)[:, :, 1]  # (B,K)
+    obj_prob = sigmoid(obj_logits)[:, :, 0]  # (B,K)
+
     if not config_dict['use_3d_nms']:
         # ---------- NMS input: pred_with_prob in (B,K,7) -----------
         pred_mask = np.zeros((bsize, K))

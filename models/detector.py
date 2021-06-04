@@ -60,7 +60,7 @@ class GroupFreeDetector(nn.Module):
         self.size_cls_agnostic = size_cls_agnostic
 
         # Backbone point feature learning
-        self.backbone_net = Pointnet2Backbone(input_feature_dim=self.input_feature_dim, use_trans=True)
+        self.backbone_net = Pointnet2Backbone(input_feature_dim=self.input_feature_dim)
 
         if self.sampling == 'fps':
             self.fps_module = FPSModule(num_proposal)
@@ -228,8 +228,6 @@ class GroupFreeDetector(nn.Module):
             base_size = base_size.detach().clone()
 
         # Rename scores and residuals from last layer to match with ScanRefer
-
-        # TODO: check if modification worked
         end_points['objectness_scores'] = end_points['last_objectness_scores']
         end_points['center'] = end_points['last_center']
         end_points['heading_scores'] = end_points['last_heading_scores'] 

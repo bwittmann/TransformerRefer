@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 import sys
 import os
@@ -10,7 +9,7 @@ ROOT_DIR = os.path.dirname(BASE_DIR)
 sys.path.append(os.path.join(ROOT_DIR, 'utils'))
 from utils.nn_distance import nn_distance
 from lib.loss import smoothl1_loss, l1_loss, SigmoidFocalClassificationLoss, SoftmaxRankingLoss
-from utils.box_util import get_3d_box, get_3d_box_batch, box3d_iou, box3d_iou_batch
+from utils.box_util import get_3d_box_batch, box3d_iou_batch
 
 FAR_THRESHOLD = 0.6
 NEAR_THRESHOLD = 0.3
@@ -461,7 +460,6 @@ def get_loss_detector(end_points,
             end_points['last_objectness_label'].shape).cuda()
         end_points["cluster_ref"] = end_points['last_objectness_label'].new_zeros(
             end_points['last_objectness_label'].shape).float().cuda()
-
         # store
         end_points["ref_loss"] = torch.zeros(1)[0].cuda()
 

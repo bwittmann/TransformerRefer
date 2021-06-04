@@ -3,26 +3,19 @@ import sys
 import json
 import pickle
 import argparse
-import importlib
 import torch
-import torch.optim as optim
-import torch.nn as nn
 import numpy as np
 
 from torch.utils.data import DataLoader
-from datetime import datetime
 from tqdm import tqdm
 from copy import deepcopy
 
 sys.path.append(os.path.join(os.getcwd())) # HACK add the root folder
 from lib.config import CONF
 from lib.dataset import ScannetReferenceDataset
-from lib.solver import Solver
 from lib.ap_helper import APCalculator, parse_predictions, parse_groundtruths
-from lib.loss_helper import get_loss
 from lib.loss_helper_detector import get_loss_detector
 from lib.eval_helper import get_eval
-from models.refnet import RefNet
 from models.refnetV2 import RefNetV2
 from data.scannet.model_util_scannet import ScannetDatasetConfig
 
@@ -50,28 +43,16 @@ def get_model(args, config):
     # load model
     input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(not args.no_height)
 
-    if args.transformer:
-        model = RefNetV2(
-            num_class=config.num_class,
-            num_heading_bin=config.num_heading_bin,
-            num_size_cluster=config.num_size_cluster,
-            mean_size_arr=config.mean_size_arr,
-            num_proposal=args.num_proposals,
-            input_feature_dim=input_channels,
-            use_lang_classifier=(not args.no_lang_cls),
-            use_bidir=args.use_bidir
-        ).cuda()
-    else:
-        model = RefNet(
-            num_class=config.num_class,
-            num_heading_bin=config.num_heading_bin,
-            num_size_cluster=config.num_size_cluster,
-            mean_size_arr=config.mean_size_arr,
-            num_proposal=args.num_proposals,
-            input_feature_dim=input_channels,
-            use_lang_classifier=(not args.no_lang_cls),
-            use_bidir=args.use_bidir
-        ).cuda() 
+    model = RefNetV2(
+        num_class=config.num_class,
+        num_heading_bin=config.num_heading_bin,
+        num_size_cluster=config.num_size_cluster,
+        mean_size_arr=config.mean_size_arr,
+        num_proposal=args.num_proposals,
+        input_feature_dim=input_channels,
+        use_lang_classifier=(not args.no_lang_cls),
+        use_bidir=args.use_bidir
+    ).cuda()
 
     model_name = "model_last.pth" if args.detection else "model.pth"
     path = os.path.join(CONF.PATH.OUTPUT, args.folder, model_name)
@@ -166,25 +147,16 @@ def eval_ref(args):
                 # feed
                 data = model(data)
 
-                if args.transformer:
-                    _, data = get_loss_detector(
-                        end_points=data, 
-                        config=DC,
-                        num_decoder_layers=6,
-                        detection=True,
-                        reference=True,
-                        use_lang_classifier=not args.no_lang_cls,
-                        use_votenet_objectness=args.use_votenet_objectness
-                    )
-                else:
-                    _, data = get_loss(
-                        data_dict=data, 
-                        config=DC, 
-                        detection=True,
-                        reference=True, 
-                        use_lang_classifier=not args.no_lang_cls
-                    )
-                    
+                _, data = get_loss_detector(
+                    end_points=data, 
+                    config=DC,
+                    num_decoder_layers=6,
+                    detection=True,
+                    reference=True,
+                    use_lang_classifier=not args.no_lang_cls,
+                    use_votenet_objectness=args.use_votenet_objectness
+                )
+  
                 data = get_eval(
                     data_dict=data, 
                     config=DC,
@@ -193,15 +165,14 @@ def eval_ref(args):
                     use_oracle=args.use_oracle,
                     use_cat_rand=args.use_cat_rand,
                     use_best=args.use_best,
-                    post_processing=POST_DICT,
-                    use_trans=args.transformer
+                    post_processing=POST_DICT
                 )
 
-                ref_acc += data["ref_acc"]
                 ious += data["ref_iou"]
                 masks += data["ref_multiple_mask"]
                 others += data["ref_others_mask"]
                 lang_acc.append(data["lang_acc"].item())
+                ref_acc.append(data["ref_acc"].item())
 
                 # store predictions
                 ids = data["scan_idx"].detach().cpu().numpy()
@@ -425,34 +396,27 @@ def eval_det(args):
         # feed
         with torch.no_grad():
             data = model(data)
-            if args.transformer:
-                _, data = get_loss_detector(
-                    end_points=data,
-                    config=DC,
-                    num_decoder_layers=6,
-                    detection=True,
-                    reference=False,
-                    use_lang_classifier=not args.no_lang_cls,
-                    use_votenet_objectness=args.use_votenet_objectness
-                )
-            else:
-                _, data = get_loss(
-                    data_dict=data,
-                    config=DC,
-                    detection=True,
-                    reference=False
-                )
+
+            _, data = get_loss_detector(
+                end_points=data,
+                config=DC,
+                num_decoder_layers=6,
+                detection=True,
+                reference=False,
+                use_lang_classifier=not args.no_lang_cls,
+                use_votenet_objectness=args.use_votenet_objectness
+            )
+
             data = get_eval(
                 data_dict=data, 
                 config=DC, 
                 reference=False,
-                post_processing=POST_DICT,
-                use_trans=args.transformer
+                post_processing=POST_DICT
             )
 
         sem_acc.append(data["sem_acc"].item())
 
-        batch_pred_map_cls = parse_predictions(data, POST_DICT, args.transformer)
+        batch_pred_map_cls = parse_predictions(data, POST_DICT)
         batch_gt_map_cls = parse_groundtruths(data, POST_DICT) 
         for ap_calculator in AP_CALCULATOR_LIST:
             ap_calculator.step(batch_pred_map_cls, batch_gt_map_cls)
@@ -490,7 +454,6 @@ if __name__ == "__main__":
     parser.add_argument("--use_best", action="store_true", help="Use best bounding boxes as outputs.")
     parser.add_argument("--reference", action="store_true", help="evaluate the reference localization results")
     parser.add_argument("--detection", action="store_true", help="evaluate the object detection results")
-    parser.add_argument("--transformer", action="store_true", help="Use the transformer for object detection")
     parser.add_argument("--use_votenet_objectness", action="store_true", help="Use VoteNet's objectness labeling with transformer object detection")
     args = parser.parse_args()
 

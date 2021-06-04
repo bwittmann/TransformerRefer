@@ -4,16 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
-import torch.nn as nn
 import numpy as np
 import sys
 import os
 
 sys.path.append(os.path.join(os.getcwd(), "lib"))  # HACK add the lib folder
-from utils.nn_distance import nn_distance, huber_loss
 from lib.ap_helper import parse_predictions
-from lib.loss import SoftmaxRankingLoss
-from utils.box_util import get_3d_box, get_3d_box_batch, box3d_iou
+from utils.box_util import get_3d_box, box3d_iou
 
 
 def eval_ref_one_sample(pred_bbox, gt_bbox):
@@ -45,7 +42,7 @@ def construct_bbox_corners(center, box_size):
 
 
 def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle=False, use_cat_rand=False,
-             use_best=False, post_processing=None, use_trans=False):
+             use_best=False, post_processing=None):
     """ Loss functions
 
     Args:
@@ -59,16 +56,12 @@ def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle
     """
     batch_size, num_words, _ = data_dict["lang_feat"].shape
 
-    # Group Free Transformer only predicts a single objectness score, while VoteNet predicts two
-    if use_trans:
-        objectness_preds_batch = (data_dict['objectness_scores'] > 0).squeeze(2).long()
-    else:
-        objectness_preds_batch = torch.argmax(data_dict['objectness_scores'], 2).long()
-
+    # Group Free Transformer only predicts a single objectness score
+    objectness_preds_batch = (data_dict['objectness_scores'] > 0).squeeze(2).long()
     objectness_labels_batch = data_dict['objectness_label'].long()
 
     if post_processing:
-        _ = parse_predictions(data_dict, post_processing, use_trans)
+        _ = parse_predictions(data_dict, post_processing)
         nms_masks = torch.LongTensor(data_dict['pred_mask']).cuda()
 
         # construct valid mask
