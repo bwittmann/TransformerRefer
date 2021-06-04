@@ -80,12 +80,12 @@ def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle
     cluster_labels *= label_masks
 
     # compute classification scores
-    corrects = torch.sum((cluster_preds == 1) * (cluster_labels == 1)).float()
-    labels = torch.sum(cluster_labels == 1).float()
+    corrects = torch.sum((cluster_preds == 1) * (cluster_labels == 1), dim=1).float()
+    labels = torch.sum(cluster_labels == 1, dim=1).float()
     ref_acc = corrects / (labels + 1e-8)
 
     # store
-    data_dict["ref_acc"] = ref_acc
+    data_dict["ref_acc"] = ref_acc.cpu().numpy().tolist()
 
     # compute localization metrics
     if use_best:
@@ -206,7 +206,7 @@ def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle
         data_dict["lang_acc"] = torch.zeros(1)[0].cuda()
 
     # store
-    data_dict["ref_iou"] = ious
+    data_dict["ref_iou"] = ious  # TODO: .cpu().numpy().tolist() ?
 
     data_dict["ref_iou_rate_0.25"] = np.array(ious)[np.array(ious) >= 0.25].shape[0] / np.array(ious).shape[0]
     data_dict["ref_iou_rate_0.5"] = np.array(ious)[np.array(ious) >= 0.5].shape[0] / np.array(ious).shape[0]
