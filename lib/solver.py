@@ -446,14 +446,14 @@ class Solver():
                 # TODO: instead of logging the average over the values of the epoch so far, wouldn't it be more
                 #  informative to log the stats of the last iteration. -> will be much noisier and spikier though,
                 #  especially with small batch sizes
-                # values = np.array([v for v in self.log[phase][item]])
-                # remove nan
-                # values = values[~np.isnan(values)]
-                # log_value = -1.0
-                # if we have a non-empty array with no infinite
-                # if len(values) and not sum(np.isinf(values)):
-                #     log_value = np.nanmean(values)
-                log_value = self._running_log[item]
+                values = np.array([v for v in self.log[phase][item]])
+                #remove nan
+                values = values[~np.isnan(values)]
+                log_value = -1.0
+                #if we have a non-empty array with no infinite
+                if len(values) and not sum(np.isinf(values)):
+                    log_value = np.nanmean(values)
+                #log_value = self._running_log[item]
                 self._log_writer[phase].add_scalar("{}/{}".format(key, item), log_value, self._global_iter_id)
 
     def _finish(self, epoch_id):

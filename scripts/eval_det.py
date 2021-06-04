@@ -66,15 +66,32 @@ def get_model(args, config):
     input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(
         not args.no_height)
 
+    detector_args = {
+        'width' : args.width,
+        'bn_momentum' : args.bn_momentum,
+        'sync_bn' : args.sync_bn,
+        'dropout' : args.dropout,
+        'activation' : args.activation,
+        'nhead' : args.nhead,
+        'num_decoder_layers' : args.num_decoder_layers,
+        'dim_feedforward' : args.dim_feedforward,
+        'cross_position_embedding' : args.cross_position_embedding,
+        'size_cls_agnostic' : args.size_cls_agnostic,
+        'num_proposals' : args.num_proposals,
+        'sampling' : args.sampling,
+        'self_position_embedding' : args.self_position_embedding
+    }
+
     model = RefNetV2(
         num_class=config.num_class,
         num_heading_bin=config.num_heading_bin,
         num_size_cluster=config.num_size_cluster,
         mean_size_arr=config.mean_size_arr,
-        num_proposal=args.num_proposals,
         input_feature_dim=input_channels,
         use_lang_classifier=(not args.no_lang_cls),
-        use_bidir=args.use_bidir
+        use_bidir=args.use_bidir,
+        detector_args=detector_args,
+        emb_size=args.emb_size
     ).cuda()
 
     model_name = "model.pth"
@@ -200,7 +217,7 @@ def eval(args, avg_times=5):
 
 def parse_option():
     parser = argparse.ArgumentParser()
-    # Eval
+    # eval related arguments
     parser.add_argument('--avg_times', default=5, type=int, help='Average times')
     parser.add_argument("--rng_seed", type=int, default=0, help='manual seed')
     parser.add_argument('--dump_dir', default='dump', help='Dump dir to save sample outputs [default: None]')
@@ -213,11 +230,7 @@ def parse_option():
     parser.add_argument('--faster_eval', action='store_true',
                         help='Faster evaluation by skippling empty bounding box removal.')
 
-    # Transformer
-    parser.add_argument('--nhead', default=8, type=int, help='multi-head number')
-    parser.add_argument('--num_decoder_layers', default=6, type=int, help='number of decoder layers')
-
-    # Loss
+    # loss related arguments
     parser.add_argument('--query_points_generator_loss_coef', default=0.8, type=float)
     parser.add_argument('--obj_loss_coef', default=0.1, type=float, help='Loss weight for objectness loss')
     parser.add_argument('--box_loss_coef', default=1, type=float, help='Loss weight for box loss')
@@ -231,7 +244,7 @@ def parse_option():
     parser.add_argument('--query_points_obj_topk', default=4, type=int, help='query_points_obj_topk')
     parser.add_argument('--size_cls_agnostic', action='store_true', help='Use class-agnostic size prediction.')
 
-    # Data
+    # data related arguments
     parser.add_argument('--batch_size', type=int, default=16, help='Batch Size during training [default: 8]')
     parser.add_argument('--dataset', default='scannet', help='Dataset name. sunrgbd or scannet. [default: scannet]')
     parser.add_argument('--num_points', type=int, default=50000, help='Point Number [default: 50000]')
@@ -239,7 +252,6 @@ def parse_option():
     # from scanrefer
     parser.add_argument("--folder", type=str, help="Folder containing the model")
     parser.add_argument("--gpu", type=str, help="gpu", default="0")
-    parser.add_argument("--num_proposals", type=int, default=256, help="Proposal number [default: 256]")
     parser.add_argument("--num_scenes", type=int, default=-1, help="Number of scenes [default: -1]")
     parser.add_argument("--no_height", action="store_true", help="Do NOT use height signal in input.")
     parser.add_argument("--no_lang_cls", action="store_true", help="Do NOT use language classifier.")
@@ -247,10 +259,28 @@ def parse_option():
     parser.add_argument("--use_normal", action="store_true", help="Use RGB color in input.")
     parser.add_argument("--use_multiview", action="store_true", help="Use multiview images.")
     parser.add_argument("--use_bidir", action="store_true", help="Use bi-directional GRU.")
+    parser.add_argument("--emb_size", type=int, default=300, help="input size to GRU")
     parser.add_argument("--use_votenet_objectness", action="store_true",
                         help="Use VoteNet's objectness labeling with transformer object detection")
 
-    args, unparsed = parser.parse_known_args()
+    # detector related arguments
+    parser.add_argument("--num_proposals", type=int, default=256, help="proposal number")
+    parser.add_argument("--width", type=int, default=1, help="PointNet backbone width ratio")
+    parser.add_argument("--bn_momentum", type=float, default=0.1, help="batchnorm momentum")
+    parser.add_argument("--sync_bn", action="store_true", help="converts all bn layers in SyncBatchNorm layers")
+    parser.add_argument("--dropout", type=float, default=0.1, help="dropout probability")
+    parser.add_argument("--activation", type=str, default='relu', choices=["relu", "gelu", "glu"], help="activation fct used in the decoder layers")
+    parser.add_argument("--nhead", type=int, default=8, help="parallel attention heads in multihead attention")
+    parser.add_argument("--num_decoder_layers", type=int, default=6, help="number of decoder layers")
+    parser.add_argument("--dim_feedforward", type=int, default=2048, help="hidden size of the linear layers in the decoder")
+    parser.add_argument("--cross_position_embedding", type=str, default='xyz_learned', choices=["none", "xyz_learned"], 
+                        help="position embedding for cross-attention")
+    parser.add_argument("--self_position_embedding", type=str, default='loc_learned', choices=["none", "xyz_learned", "loc_learned"], 
+                        help="position embedding for self-attention")
+    parser.add_argument("--size_cls_agnostic", action="store_true", help="use class agnostic predict heads")
+    parser.add_argument("--sampling", type=str, default="kps", help="initial object candidate sampling")
+
+    args = parser.parse_known_args()
 
     return args
 

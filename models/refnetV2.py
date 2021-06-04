@@ -10,33 +10,35 @@ from models.detector import GroupFreeDetector
 
 class RefNetV2(nn.Module):
     def __init__(self, num_class, num_heading_bin, num_size_cluster, mean_size_arr, 
-    input_feature_dim=0, num_proposal=128, vote_factor=1, sampling="vote_fps",
-    use_lang_classifier=True, use_bidir=False, no_reference=False,
-    emb_size=300, hidden_size=256):
+                 input_feature_dim, use_lang_classifier, use_bidir, emb_size,
+                 detector_args, no_reference=False, hidden_size=256):
         super().__init__()
 
-        self.num_class = num_class
-        self.num_heading_bin = num_heading_bin
-        self.num_size_cluster = num_size_cluster
-        self.mean_size_arr = mean_size_arr
-        assert(mean_size_arr.shape[0] == self.num_size_cluster)
-        self.input_feature_dim = input_feature_dim
-        self.num_proposal = num_proposal
-        self.vote_factor = vote_factor
-        self.sampling = sampling
-        self.use_lang_classifier = use_lang_classifier
-        self.use_bidir = use_bidir      
+        assert(mean_size_arr.shape[0] == num_size_cluster)    
         self.no_reference = no_reference
 
 
         # ---------- TRANSFORMER ------------
-        self.detector = GroupFreeDetector(num_class=num_class,
-                                          num_heading_bin=num_heading_bin,
-                                          num_size_cluster=num_size_cluster,
-                                          mean_size_arr=mean_size_arr,
-                                          input_feature_dim=input_feature_dim,
-                                          num_proposal=num_proposal,
-                                          self_position_embedding='loc_learned')
+        self.detector = GroupFreeDetector(
+            num_class=num_class,
+            num_heading_bin=num_heading_bin,
+            num_size_cluster=num_size_cluster,
+            mean_size_arr=mean_size_arr,
+            input_feature_dim=input_feature_dim,
+            width= detector_args['width'],
+            bn_momentum= detector_args['bn_momentum'], 
+            sync_bn= detector_args['sync_bn'], 
+            num_proposal=detector_args['num_proposals'],
+            sampling=detector_args['sampling'],
+            dropout=detector_args['dropout'],
+            activation=detector_args['activation'], 
+            nhead=detector_args['nhead'], 
+            num_decoder_layers=detector_args['num_decoder_layers'],
+            dim_feedforward=detector_args['dim_feedforward'], 
+            self_position_embedding=detector_args['self_position_embedding'],
+            cross_position_embedding=detector_args['cross_position_embedding'],
+            size_cls_agnostic=detector_args['size_cls_agnostic']
+        )
         
         if not no_reference:
             # --------- LANGUAGE ENCODING ---------
@@ -46,7 +48,7 @@ class RefNetV2(nn.Module):
 
             # --------- PROPOSAL MATCHING ---------
             # Match the generated proposals and select the most confident ones
-            self.match = MatchModule(num_proposals=num_proposal, lang_size=(1 + int(self.use_bidir)) * hidden_size)
+            self.match = MatchModule(num_proposals=detector_args['num_proposals'], lang_size=(1 + int(use_bidir)) * hidden_size)
 
     def forward(self, data_dict):
         """ Forward pass of the network

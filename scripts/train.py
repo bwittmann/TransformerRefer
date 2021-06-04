@@ -52,28 +52,60 @@ def get_model(args):
     input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(
         not args.no_height)
 
+    detector_args = {
+        'width' : args.width,
+        'bn_momentum' : args.bn_momentum,
+        'sync_bn' : args.sync_bn,
+        'dropout' : args.dropout,
+        'activation' : args.activation,
+        'nhead' : args.nhead,
+        'num_decoder_layers' : args.num_decoder_layers,
+        'dim_feedforward' : args.dim_feedforward,
+        'cross_position_embedding' : args.cross_position_embedding,
+        'size_cls_agnostic' : args.size_cls_agnostic,
+        'num_proposals' : args.num_proposals,
+        'sampling' : args.sampling,
+        'self_position_embedding' : args.self_position_embedding
+    }
+
     model = RefNetV2(
         num_class=DC.num_class,
         num_heading_bin=DC.num_heading_bin,
         num_size_cluster=DC.num_size_cluster,
         mean_size_arr=DC.mean_size_arr,
-        num_proposal=args.num_proposals,
         input_feature_dim=input_channels,
         use_lang_classifier=(not args.no_lang_cls),
-        use_bidir=args.use_bidir
+        use_bidir=args.use_bidir,
+        no_reference=args.no_reference,
+        detector_args=detector_args,
+        emb_size=args.emb_size
     )
 
     # pretrained transformer directly from GroupFreeDetector weights
     if args.use_pretrained_transformer:
         # load model
         print("loading pretrained GroupFreeDetector...")
-        pretrained_detector = GroupFreeDetector(num_class=DC.num_class,
-                                                num_heading_bin=DC.num_heading_bin,
-                                                num_size_cluster=DC.num_size_cluster,
-                                                mean_size_arr=DC.mean_size_arr,
-                                                input_feature_dim=input_channels,
-                                                num_proposal=args.num_proposals,
-                                                self_position_embedding='loc_learned')
+
+        pretrained_detector = GroupFreeDetector(
+            num_class=DC.num_class,
+            num_heading_bin=DC.num_heading_bin,
+            num_size_cluster=DC.num_size_cluster,
+            mean_size_arr=DC.mean_size_arr,
+            input_feature_dim=input_channels,
+            width= detector_args['width'],
+            bn_momentum= detector_args['bn_momentum'], 
+            sync_bn= detector_args['sync_bn'], 
+            num_proposal=detector_args['num_proposals'],
+            sampling=detector_args['sampling'],
+            dropout=detector_args['dropout'],
+            activation=detector_args['activation'], 
+            nhead=detector_args['nhead'], 
+            num_decoder_layers=detector_args['num_decoder_layers'],
+            dim_feedforward=detector_args['dim_feedforward'], 
+            self_position_embedding=detector_args['self_position_embedding'],
+            cross_position_embedding=detector_args['cross_position_embedding'],
+            size_cls_agnostic=detector_args['size_cls_agnostic']
+        )
 
         # model created with nn.DataParallel -> need to create new ordered dict and remove "module" prefix
         checkpoint = torch.load(args.use_pretrained_transformer, map_location='cpu')
@@ -91,15 +123,19 @@ def get_model(args):
     elif args.use_pretrained:
         # load model
         print("loading pretrained ScanRefer with Group Free Transformer detection...")
+
+
         pretrained_model = RefNetV2(
             num_class=DC.num_class,
             num_heading_bin=DC.num_heading_bin,
             num_size_cluster=DC.num_size_cluster,
             mean_size_arr=DC.mean_size_arr,
-            num_proposal=args.num_proposals,
             input_feature_dim=input_channels,
             use_lang_classifier=(not args.no_lang_cls),
-            use_bidir=args.use_bidir
+            use_bidir=args.use_bidir,
+            no_reference=args.no_reference,
+            detector_args=detector_args,
+            emb_size=args.emb_size
         )
 
         pretrained_path = os.path.join(CONF.PATH.OUTPUT, args.use_pretrained, "model_last.pth")
@@ -207,17 +243,19 @@ def get_solver(args, dataloader):
         root = os.path.join(CONF.PATH.OUTPUT, stamp)
         os.makedirs(root, exist_ok=True)
 
-    loss_args = {"query_points_generator_loss_coef": args.query_points_generator_loss_coef,
-                 "obj_loss_coef": args.obj_loss_coef,
-                 "box_loss_coef": args.box_loss_coef,
-                 "sem_cls_loss_coef": args.sem_cls_loss_coef,
-                 "center_delta": args.center_delta,
-                 "size_delta": args.size_delta,
-                 "heading_delta": args.heading_delta,
-                 "detection_loss_coef": args.detection_loss_coef,
-                 "ref_loss_coef": args.ref_loss_coef,
-                 "lang_loss_coef": args.lang_loss_coef,
-                 "use_votenet_objectness": args.use_votenet_objectness}
+    loss_args = {
+        "query_points_generator_loss_coef" : args.query_points_generator_loss_coef,
+        "obj_loss_coef" : args.obj_loss_coef,
+        "box_loss_coef" : args.box_loss_coef,
+        "sem_cls_loss_coef" : args.sem_cls_loss_coef,
+        "center_delta" : args.center_delta,
+        "size_delta" : args.size_delta,
+        "heading_delta" : args.heading_delta,
+        "detection_loss_coef" : args.detection_loss_coef,
+        "ref_loss_coef" : args.ref_loss_coef,
+        "lang_loss_coef" : args.lang_loss_coef,
+        "use_votenet_objectness" : args.use_votenet_objectness
+    }
 
     # get solver
     solver = Solver(
@@ -342,12 +380,12 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", type=int, help="iterations of showing verbose", default=10)
     parser.add_argument("--val_step", type=int, help="iterations of validating", default=5000)
     parser.add_argument("--num_points", type=int, default=50000, help="point number")
-    parser.add_argument("--num_proposals", type=int, default=256, help="proposal number")
     parser.add_argument("--num_scenes", type=int, default=-1, help="number of scenes")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
     parser.add_argument("--augment", action="store_true", help="use data augmentation") 
     parser.add_argument("--no_lang_cls", action="store_true", help="do NOT use language classifier")
     parser.add_argument("--use_bidir", action="store_true", help="use bi-directional GRU")
+    parser.add_argument("--emb_size", type=int, default=300, help="input size to GRU")
     parser.add_argument("--no_validation", action="store_true", help="do NOT validate; only for development debugging")
 
 
@@ -402,6 +440,24 @@ if __name__ == "__main__":
     parser.add_argument('--center_delta', default=1.0, type=float, help='delta for smoothl1 loss in center loss')
     parser.add_argument('--size_delta', default=1.0, type=float, help='delta for smoothl1 loss in size loss')
     parser.add_argument('--heading_delta', default=1.0, type=float, help='delta for smoothl1 loss in heading loss')
+
+
+    # detector related arguments
+    parser.add_argument("--num_proposals", type=int, default=256, help="proposal number")
+    parser.add_argument("--width", type=int, default=1, help="PointNet backbone width ratio")
+    parser.add_argument("--bn_momentum", type=float, default=0.1, help="batchnorm momentum")
+    parser.add_argument("--sync_bn", action="store_true", help="converts all bn layers in SyncBatchNorm layers")
+    parser.add_argument("--dropout", type=float, default=0.1, help="dropout probability")
+    parser.add_argument("--activation", type=str, default='relu', choices=["relu", "gelu", "glu"], help="activation fct used in the decoder layers")
+    parser.add_argument("--nhead", type=int, default=8, help="parallel attention heads in multihead attention")
+    parser.add_argument("--num_decoder_layers", type=int, default=6, help="number of decoder layers")
+    parser.add_argument("--dim_feedforward", type=int, default=2048, help="hidden size of the linear layers in the decoder")
+    parser.add_argument("--cross_position_embedding", type=str, default='xyz_learned', choices=["none", "xyz_learned"], 
+                        help="position embedding for cross-attention")
+    parser.add_argument("--self_position_embedding", type=str, default='loc_learned', choices=["none", "xyz_learned", "loc_learned"], 
+                        help="position embedding for self-attention")
+    parser.add_argument("--size_cls_agnostic", action="store_true", help="use class agnostic predict heads")
+    parser.add_argument("--sampling", type=str, default="kps", help="initial object candidate sampling")
 
 
     args = parser.parse_args()
