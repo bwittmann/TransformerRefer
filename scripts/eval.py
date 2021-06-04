@@ -172,7 +172,7 @@ def eval_ref(args):
                 masks += data["ref_multiple_mask"]
                 others += data["ref_others_mask"]
                 lang_acc.append(data["lang_acc"].item())
-                ref_acc.append(data["ref_acc"].item())
+                ref_acc += data["ref_acc"]
 
                 # store predictions
                 ids = data["scan_idx"].detach().cpu().numpy()
