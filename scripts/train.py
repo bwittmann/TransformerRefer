@@ -272,6 +272,7 @@ def get_solver(args, dataloader):
         detection=not args.no_detection,
         reference=not args.no_reference,
         use_lang_classifier=not args.no_lang_cls,
+        num_decoder_layers=args.num_decoder_layers,
         loss_args=loss_args
     )
     num_params = get_num_params(model)

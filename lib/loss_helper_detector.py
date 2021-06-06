@@ -380,28 +380,12 @@ def compute_lang_classification_loss(data_dict):
     return loss
 
 
-def get_loss_detector(end_points,
-                      config,
-                      num_decoder_layers=6,
-                      query_points_generator_loss_coef=0.8,
-                      obj_loss_coef=0.1,
-                      box_loss_coef=1.,
-                      sem_cls_loss_coef=0.1,
-                      detection_loss_coef=1.0,
-                      ref_loss_coef=0.1,
-                      lang_loss_coef=0.1,
-                      query_points_obj_topk=5,
-                      center_loss_type='smoothl1',
-                      center_delta=1.0,
-                      size_loss_type='smoothl1',
-                      size_delta=1.0,
-                      heading_loss_type='smoothl1',
-                      heading_delta=1.0,
-                      size_cls_agnostic=False,
-                      detection=True,
-                      reference=True,
-                      use_lang_classifier=False,
-                      use_votenet_objectness=False):
+def get_loss_detector(end_points, config, num_decoder_layers=6, query_points_generator_loss_coef=0.8,
+                      obj_loss_coef=0.1, box_loss_coef=1., sem_cls_loss_coef=0.1, detection_loss_coef=1.0,
+                      ref_loss_coef=0.1, lang_loss_coef=0.1, query_points_obj_topk=5, center_loss_type='smoothl1',
+                      center_delta=1.0, size_loss_type='smoothl1', size_delta=1.0, heading_loss_type='smoothl1',
+                      heading_delta=1.0, size_cls_agnostic=False, detection=True,reference=True,
+                      use_lang_classifier=False, use_votenet_objectness=False):
     """ Loss functions
     """
     if 'seeds_obj_cls_logits' in end_points.keys():

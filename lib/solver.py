@@ -91,7 +91,7 @@ BEST_REPORT_TEMPLATE = """
 
 class Solver():
     def __init__(self, model, config, dataloader, optimizer, lr_scheduler, bn_scheduler, clip_norm, stamp, val_step=10,
-                 detection=True, reference=True, use_lang_classifier=True, loss_args=None, no_validation=True):
+                 detection=True, reference=True, use_lang_classifier=True, loss_args=None, no_validation=True, num_decoder_layers=6):
         self.epoch = 0                    # set in __call__
         self.verbose = 0                  # set in __call__
         
@@ -105,6 +105,7 @@ class Solver():
         self.stamp = stamp
         self.no_validation = no_validation
         self.val_step = val_step
+        self.num_decoder_layers = num_decoder_layers
 
         self.detection = detection
         self.reference = reference
@@ -270,7 +271,7 @@ class Solver():
         _, data_dict = get_loss_detector(
             end_points=data_dict, 
             config=self.config,
-            num_decoder_layers=6, 
+            num_decoder_layers=self.num_decoder_layers,
             query_points_generator_loss_coef=self.loss_args["query_points_generator_loss_coef"],
             obj_loss_coef=self.loss_args["obj_loss_coef"],
             box_loss_coef=self.loss_args["box_loss_coef"],
