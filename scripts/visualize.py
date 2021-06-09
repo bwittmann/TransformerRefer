@@ -20,7 +20,8 @@ from lib.eval_helper import get_eval
 from lib.config import CONF
 
 # data
-SCANNET_ROOT = "/mnt/canis/Datasets/ScanNet/public/v2/scans/" # TODO point this to your scannet data
+#SCANNET_ROOT = "/mnt/canis/Datasets/ScanNet/public/v2/scans/" # TODO point this to your scannet data
+SCANNET_ROOT = "/home/bastian/git/TransformerScanRefer/data/scannet/scans"
 SCANNET_MESH = os.path.join(SCANNET_ROOT, "{}/{}_vh_clean_2.ply") # scene_id, scene_id 
 SCANNET_META = os.path.join(SCANNET_ROOT, "{}/{}.txt") # scene_id, scene_id 
 SCANREFER_TRAIN = json.load(open(os.path.join(CONF.PATH.DATA, "ScanRefer_filtered_train.json")))
@@ -49,13 +50,34 @@ def get_dataloader(args, scanrefer, all_scene_list, split, config, augment):
 def get_model(args):
     # load model
     input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(not args.no_height)
-    model = RefNet(
+
+    detector_args = {
+        'width' : args.width,
+        'bn_momentum' : args.bn_momentum,
+        'sync_bn' : args.sync_bn,
+        'dropout' : args.dropout,
+        'activation' : args.activation,
+        'nhead' : args.nhead,
+        'num_decoder_layers' : args.num_decoder_layers,
+        'dim_feedforward' : args.dim_feedforward,
+        'cross_position_embedding' : args.cross_position_embedding,
+        'size_cls_agnostic' : args.size_cls_agnostic,
+        'num_proposals' : args.num_proposals,
+        'sampling' : args.sampling,
+        'self_position_embedding' : args.self_position_embedding
+    }
+
+    model = RefNetV2(
         num_class=DC.num_class,
         num_heading_bin=DC.num_heading_bin,
         num_size_cluster=DC.num_size_cluster,
         mean_size_arr=DC.mean_size_arr,
-        num_proposal=args.num_proposals,
-        input_feature_dim=input_channels
+        input_feature_dim=input_channels,
+        use_lang_classifier=(not args.no_lang_cls),
+        use_bidir=args.use_bidir,
+        no_reference=args.no_reference,
+        detector_args=detector_args,
+        emb_size=args.emb_size
     ).cuda()
 
     path = os.path.join(CONF.PATH.OUTPUT, args.folder, "model.pth")
@@ -330,7 +352,8 @@ def dump_results(args, scanrefer, data, config):
     
     # from network outputs
     # detection
-    pred_objectness = torch.argmax(data['objectness_scores'], 2).float().detach().cpu().numpy()
+    #pred_objectness = torch.argmax(data['objectness_scores'], 2).float().detach().cpu().numpy()
+    pred_objectness = (data['objectness_scores'] > 0).squeeze(2).float().detach().cpu().numpy()
     pred_center = data['center'].detach().cpu().numpy() # (B,K,3)
     pred_heading_class = torch.argmax(data['heading_scores'], -1) # B,num_proposal
     pred_heading_residual = torch.gather(data['heading_residuals'], 2, pred_heading_class.unsqueeze(-1)) # B,num_proposal,1
@@ -341,7 +364,8 @@ def dump_results(args, scanrefer, data, config):
     pred_size_residual = pred_size_residual.squeeze(2).detach().cpu().numpy() # B,num_proposal,3
     # reference
     pred_ref_scores = data["cluster_ref"].detach().cpu().numpy()
-    pred_ref_scores_softmax = F.softmax(data["cluster_ref"] * torch.argmax(data['objectness_scores'], 2).float() * data['pred_mask'], dim=1).detach().cpu().numpy()
+    #pred_ref_scores_softmax = F.softmax(data["cluster_ref"] * torch.argmax(data['objectness_scores'], 2).float() * data['pred_mask'], dim=1).detach().cpu().numpy()
+    pred_ref_scores_softmax = F.softmax(data["cluster_ref"] * (data['objectness_scores'] > 0).squeeze(2).float() * data['pred_mask'], dim=1).detach().cpu().numpy()
     # post-processing
     nms_masks = data['pred_mask'].detach().cpu().numpy() # B,num_proposal
     
@@ -433,17 +457,32 @@ def visualize(args):
         # feed
         data = model(data)
         # _, data = get_loss(data, DC, True, True, POST_DICT)
-        # TODO: implement transformer loss
-        _, data = get_loss(
-            data_dict=data, 
+
+        _, data = get_loss_detector(
+            end_points=data, 
             config=DC, 
+            num_decoder_layers=args.num_decoder_layers,
+            query_points_generator_loss_coef=args.query_points_generator_loss_coef,
+            obj_loss_coef=args.obj_loss_coef,
+            box_loss_coef=args.box_loss_coef,
+            sem_cls_loss_coef=args.sem_cls_loss_coef,
+            center_delta=args.center_delta,
+            size_delta=args.size_delta,
+            heading_delta=args.heading_delta,
+            detection_loss_coef=args.detection_loss_coef,
+            ref_loss_coef=args.ref_loss_coef,
+            lang_loss_coef=args.lang_loss_coef,
             detection=True,
-            reference=True
+            reference=True,
+            use_lang_classifier=(not args.no_lang_cls),
+            use_votenet_objectness=args.use_votenet_objectness
         )
+
         data = get_eval(
             data_dict=data, 
             config=DC,
             reference=True, 
+            use_lang_classifier=(not args.no_lang_cls),
             post_processing=POST_DICT
         )
         
@@ -460,7 +499,6 @@ if __name__ == "__main__":
     parser.add_argument("--scene_id", type=str, help="scene id", default="")
     parser.add_argument("--batch_size", type=int, help="batch size", default=8)
     parser.add_argument('--num_points', type=int, default=40000, help='Point Number [default: 40000]')
-    parser.add_argument('--num_proposals', type=int, default=256, help='Proposal number [default: 256]')
     parser.add_argument('--num_scenes', type=int, default=-1, help='Number of scenes [default: -1]')
     parser.add_argument('--no_height', action='store_true', help='Do NOT use height signal in input.')
     parser.add_argument('--no_nms', action='store_true', help='do NOT use non-maximum suppression for post-processing.')
@@ -468,7 +506,45 @@ if __name__ == "__main__":
     parser.add_argument('--use_color', action='store_true', help='Use RGB color in input.')
     parser.add_argument('--use_normal', action='store_true', help='Use RGB color in input.')
     parser.add_argument('--use_multiview', action='store_true', help='Use multiview images.')
-    # TODO: add --transformer (and adjust the objectnesses above, in dump_results)
+    
+    parser.add_argument("--use_bidir", action="store_true", help="use bi-directional GRU")
+    parser.add_argument("--no_lang_cls", action="store_true", help="do NOT use language classifier")
+    parser.add_argument("--no_reference", action="store_true", help="do NOT train the localization module")
+    parser.add_argument("--emb_size", type=int, default=300, help="input size to GRU")
+
+
+    # loss related arguments
+    parser.add_argument('--use_votenet_objectness', action="store_true", help='use objectness as it is used by VoteNet')
+
+    parser.add_argument('--detection_loss_coef', default=1., type=float, help='loss weight for detection loss')  #TODO rename
+    parser.add_argument('--ref_loss_coef', default=0.1, type=float, help='loss weight for ref loss')
+    parser.add_argument('--lang_loss_coef', default=0.1, type=float, help='loss weight for lang loss')
+    parser.add_argument('--query_points_generator_loss_coef', default=0.8, type=float)
+    parser.add_argument('--obj_loss_coef', default=0.1, type=float, help='loss weight for objectness loss')
+    parser.add_argument('--box_loss_coef', default=1, type=float, help='loss weight for box loss')
+    parser.add_argument('--sem_cls_loss_coef', default=0.1, type=float, help='loss weight for classification loss')
+
+    parser.add_argument('--center_delta', default=1.0, type=float, help='delta for smoothl1 loss in center loss')
+    parser.add_argument('--size_delta', default=1.0, type=float, help='delta for smoothl1 loss in size loss')
+    parser.add_argument('--heading_delta', default=1.0, type=float, help='delta for smoothl1 loss in heading loss')
+
+    # detector related arguments
+    parser.add_argument("--num_proposals", type=int, default=256, help="proposal number")
+    parser.add_argument("--width", type=int, default=1, help="PointNet backbone width ratio")
+    parser.add_argument("--bn_momentum", type=float, default=0.1, help="batchnorm momentum")
+    parser.add_argument("--sync_bn", action="store_true", help="converts all bn layers in SyncBatchNorm layers")
+    parser.add_argument("--dropout", type=float, default=0.1, help="dropout probability")
+    parser.add_argument("--activation", type=str, default='relu', choices=["relu", "gelu", "glu"], help="activation fct used in the decoder layers")
+    parser.add_argument("--nhead", type=int, default=8, help="parallel attention heads in multihead attention")
+    parser.add_argument("--num_decoder_layers", type=int, default=6, help="number of decoder layers")
+    parser.add_argument("--dim_feedforward", type=int, default=2048, help="hidden size of the linear layers in the decoder")
+    parser.add_argument("--cross_position_embedding", type=str, default='xyz_learned', choices=["none", "xyz_learned"], 
+                        help="position embedding for cross-attention")
+    parser.add_argument("--self_position_embedding", type=str, default='loc_learned', choices=["none", "xyz_learned", "loc_learned"], 
+                        help="position embedding for self-attention")
+    parser.add_argument("--size_cls_agnostic", action="store_true", help="use class agnostic predict heads")
+    parser.add_argument("--sampling", type=str, default="kps", help="initial object candidate sampling")
+
     args = parser.parse_args()
 
     # setting
