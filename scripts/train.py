@@ -225,7 +225,7 @@ def get_solver(args, dataloader):
     # get learning rate and batch norm scheduler
     lr_scheduler = get_scheduler(optimizer, args.epoch, args.lr_scheduler,
                                     args.lr_decay_epochs, args.lr_decay_rate, args.warmup_epoch,
-                                    args.warmup_multiplier, args.lr_patience, args.lr_threshold)
+                                    args.warmup_multiplier, args.lr_patience, args.lr_threshold, args.lr_cooldown)
     bn_scheduler = None
     
 
@@ -402,7 +402,7 @@ if __name__ == "__main__":
     parser.add_argument("--no_detection", action="store_true", help="do NOT train the detection module")
 
     parser.add_argument("--use_pretrained", type=str, help="specify the folder name in outputs containing the pretrained model")
-    parser.add_argument("--use_pretrained_transformer", type=str, help="specify the absolute file path for pretrained GroupFreeDetector module")
+    parser.add_argument("--use_pretrained_transformer", type=str, help="specify the absolute file path for pretrained GroupFreeDetector module")    #TODO rename
     parser.add_argument("--use_checkpoint", type=str, help="specify the checkpoint root", default="")
 
     parser.add_argument("--freeze_transformer_layers", type=str, default="none",  help="do NOT train parts of the trans. detection module",
@@ -421,7 +421,8 @@ if __name__ == "__main__":
                         help='for step scheduler; where to decay lr can be a list (add multiple space-separated values).')
     parser.add_argument('--lr_decay_rate', type=float, default=0.1, help='for step scheduler; decay rate for learning rate')
     parser.add_argument('--lr_patience', type=int, default=10, help='patience for plateau lr scheduler')
-    parser.add_argument('--lr_threshold', type=int, default=1e-4, help='measures new optimum for plateau lr scheduler')
+    parser.add_argument('--lr_threshold', type=float, default=1e-4, help='measures new optimum for plateau lr scheduler')
+    parser.add_argument('--lr_cooldown', type=int, default=0, help='number of epochs to wait between steps of plateau lr scheduler')
     parser.add_argument('--warmup_epoch', type=int, default=0, help='warmup epoch')
     parser.add_argument('--warmup_multiplier', type=int, default=100, help='warmup multiplier')
     parser.add_argument('--clip_norm', default=0.1, type=float, help='gradient clipping max norm')

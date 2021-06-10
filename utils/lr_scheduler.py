@@ -63,7 +63,7 @@ class GradualWarmupScheduler(_LRScheduler):
 
 
 def get_scheduler(optimizer, max_epoch, lr_scheduler, lr_decay_epochs, lr_decay_rate, 
-                  warmup_epoch, warmup_multiplier, lr_patience, lr_threshold):
+                  warmup_epoch, warmup_multiplier, lr_patience, lr_threshold, lr_cooldown):
     if "cosine" in lr_scheduler:
         scheduler = CosineAnnealingLR(
             optimizer=optimizer,
@@ -81,7 +81,8 @@ def get_scheduler(optimizer, max_epoch, lr_scheduler, lr_decay_epochs, lr_decay_
             optimizer=optimizer,
             factor=lr_decay_rate,
             patience=lr_patience,
-            threshold=lr_threshold)
+            threshold=lr_threshold,
+            cooldown=lr_cooldown)
     else:
         raise NotImplementedError(f"scheduler {lr_scheduler} not supported")
 
