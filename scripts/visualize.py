@@ -512,7 +512,7 @@ if __name__ == "__main__":
     parser.add_argument("--gpu", type=str, help="gpu", default="0")
     parser.add_argument("--scene_id", type=str, help="scene id", default="")
     parser.add_argument("--batch_size", type=int, help="batch size", default=8)
-    parser.add_argument('--num_points', type=int, default=40000, help='Point Number [default: 40000]')
+    parser.add_argument('--num_points', type=int, default=50000, help='Point Number [default: 50000]')
     parser.add_argument('--num_scenes', type=int, default=-1, help='Number of scenes [default: -1]')
     parser.add_argument('--no_height', action='store_true', help='Do NOT use height signal in input.')
     parser.add_argument('--no_nms', action='store_true', help='do NOT use non-maximum suppression for post-processing.')

@@ -56,6 +56,8 @@ class MatchModule(nn.Module):
 
         # match
         confidences = self.match(ref_features).squeeze(1) # batch_size, num_proposals
+        # NOTE make sure again the empty boxes won't be part of the discrimination
+        confidences.masked_fill_(objectness_masks.squeeze(-1) == 0, float('-1e30'))
 
         data_dict["cluster_ref"] = confidences
 
