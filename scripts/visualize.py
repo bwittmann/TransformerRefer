@@ -337,7 +337,7 @@ def align_mesh(scene_id):
 
     return mesh
 
-def dump_results(args, scanrefer, data, config):
+def dump_results(args, scanrefer, data, config, include_best_pred_box_ref):
     dump_dir = os.path.join(CONF.PATH.OUTPUT, args.folder, "vis")
     os.makedirs(dump_dir, exist_ok=True)
 
@@ -377,6 +377,7 @@ def dump_results(args, scanrefer, data, config):
     gt_size_residual = data['size_residual_label'].cpu().numpy() # B,K2,3
     # reference
     gt_ref_labels = data["ref_box_label"].detach().cpu().numpy()
+    pred_gt_ref = data["cluster_labels"].detach().cpu().numpy()
 
     for i in range(batch_size):
         # basic info
@@ -415,7 +416,7 @@ def dump_results(args, scanrefer, data, config):
         pred_masks = nms_masks[i] * pred_objectness[i] == 1
         assert pred_ref_scores[i].shape[0] == pred_center[i].shape[0]
         pred_ref_idx = np.argmax(pred_ref_scores[i] * pred_masks, 0)
-        assigned_gt = torch.gather(data["ref_box_label"], 1, data["object_assignment"]).detach().cpu().numpy()
+        assigned_gt = torch.gather(data["ref_box_label"], 1, data["object_assignment"]).detach().cpu().numpy()  # TODO: use in eval_helper as one of the many ref_accs
 
         # visualize the predicted reference box
         pred_obb = config.param2obb(pred_center[i, pred_ref_idx, 0:3], pred_heading_class[i, pred_ref_idx], pred_heading_residual[i, pred_ref_idx],
@@ -424,6 +425,19 @@ def dump_results(args, scanrefer, data, config):
         iou = box3d_iou(gt_bbox, pred_bbox)
 
         write_bbox(pred_obb, 1, os.path.join(scene_dump_dir, 'pred_{}_{}_{}_{:.5f}_{:.5f}.ply'.format(object_id, object_name, ann_id, pred_ref_scores_softmax[i, pred_ref_idx], iou)))
+
+        if not include_best_pred_box_ref:
+            continue
+
+        # visualize the predicted box that has the highest iou with gt ref box
+        pred_gt_ref_idx = np.argmax(pred_gt_ref[i], 0)
+        pred_gt_obb = config.param2obb(pred_center[i, pred_gt_ref_idx, 0:3], pred_heading_class[i, pred_gt_ref_idx],
+                                       pred_heading_residual[i, pred_gt_ref_idx],
+                                       pred_size_class[i, pred_gt_ref_idx], pred_size_residual[i, pred_gt_ref_idx])
+        pred_gt_bbox = get_3d_box(pred_gt_obb[3:6], pred_gt_obb[6], pred_gt_obb[0:3])
+        iou = box3d_iou(gt_bbox, pred_gt_bbox)
+
+        write_bbox(pred_gt_obb, 1, os.path.join(scene_dump_dir, 'pred_gt_{}_{}_{}_iou_{:.5f}.ply'.format(object_id, object_name, ann_id, iou)))
 
 def visualize(args):
     # init training dataset
@@ -487,7 +501,7 @@ def visualize(args):
         )
         
         # visualize
-        dump_results(args, scanrefer, data, DC)
+        dump_results(args, scanrefer, data, DC, args.also_get_best_ref_pred_bbox)
 
     print("done!")
 
@@ -544,6 +558,9 @@ if __name__ == "__main__":
                         help="position embedding for self-attention")
     parser.add_argument("--size_cls_agnostic", action="store_true", help="use class agnostic predict heads")
     parser.add_argument("--sampling", type=str, default="kps", help="initial object candidate sampling")
+
+    parser.add_argument("--also_get_best_ref_pred_bbox", action="store_true", help="Will also output the bounding boxes of the predicted bbox that has "
+                                                                                   "the highest iou with the ground truth reference bbox (prefix 'pred_gt_').")
 
     args = parser.parse_args()
 
