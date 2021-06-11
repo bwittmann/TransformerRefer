@@ -171,7 +171,8 @@ def eval_ref(args):
                     detection=True,
                     reference=True,
                     use_lang_classifier=not args.no_lang_cls,
-                    use_votenet_objectness=args.use_votenet_objectness
+                    use_votenet_objectness=args.use_votenet_objectness,
+                    use_multi_ref_gt=args.use_multi_ref_gt
                 )
   
                 data = get_eval(
@@ -421,7 +422,8 @@ def eval_det(args):
                 detection=True,
                 reference=False,
                 use_lang_classifier=not args.no_lang_cls,
-                use_votenet_objectness=args.use_votenet_objectness
+                use_votenet_objectness=args.use_votenet_objectness,
+                use_multi_ref_gt=args.use_multi_ref_gt
             )
 
             data = get_eval(
@@ -472,6 +474,7 @@ if __name__ == "__main__":
     parser.add_argument("--detection", action="store_true", help="evaluate the object detection results")
     parser.add_argument("--emb_size", type=int, default=300, help="input size to GRU")
     parser.add_argument("--use_votenet_objectness", action="store_true", help="Use VoteNet's objectness labeling with transformer object detection")
+    parser.add_argument("--use_multi_ref_gt", action="store_true", help="use multiple reference ground truths")
     
     # detector related arguments
     parser.add_argument("--num_proposals", type=int, default=256, help="proposal number")

@@ -285,7 +285,8 @@ class Solver():
             detection=self.detection,
             reference=self.reference,
             use_lang_classifier=self.use_lang_classifier,
-            use_votenet_objectness=self.loss_args["use_votenet_objectness"]
+            use_votenet_objectness=self.loss_args["use_votenet_objectness"],
+            use_multi_ref_gt=self.loss_args["use_multi_ref_gt"]
         )
 
         # dump

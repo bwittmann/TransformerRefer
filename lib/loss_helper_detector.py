@@ -318,7 +318,7 @@ def compute_box_and_sem_cls_loss(end_points, config, num_decoder_layers,
     return box_loss_sum, sem_cls_loss_sum, end_points
 
 
-def compute_reference_loss(data_dict, config):
+def compute_reference_loss(data_dict, config, use_multi_ref_gt=False):
     """ Compute cluster reference loss
 
     Args:
@@ -327,6 +327,8 @@ def compute_reference_loss(data_dict, config):
     Returns:
         ref_loss, lang_loss, cluster_preds, cluster_labels
     """
+
+    MULTI_REF_IOU_THRESHOLD = 0.3
 
     # unpack
     cluster_preds = data_dict["cluster_ref"]  # (B, num_proposal)
@@ -356,18 +358,29 @@ def compute_reference_loss(data_dict, config):
     # compute the iou score for all predicted positive ref
     batch_size, num_proposals = cluster_preds.shape
     labels = np.zeros((batch_size, num_proposals))
+    weights = np.zeros((batch_size, num_proposals))
     for i in range(pred_ref.shape[0]):
         # convert the bbox parameters to bbox corners
         pred_obb_batch = config.param2obb_batch(pred_center[i, :, 0:3], pred_heading_class[i], pred_heading_residual[i],
                                                 pred_size_class[i], pred_size_residual[i])
         pred_bbox_batch = get_3d_box_batch(pred_obb_batch[:, 3:6], pred_obb_batch[:, 6], pred_obb_batch[:, 0:3])
         ious = box3d_iou_batch(pred_bbox_batch, np.tile(gt_bbox_batch[i], (num_proposals, 1, 1)))
-        labels[i, ious.argmax()] = 1  # treat the bbox with highest iou score as the gt
+        max_idx = ious.argmax()
+        labels[i, max_idx] = 1  # treat the bbox with highest iou score as the gt
+        if use_multi_ref_gt:
+            # set all predicted bboxes with iou over threshold as gt for the ref box
+            labels[i, ious > MULTI_REF_IOU_THRESHOLD] = 1
+            # weight the ref scores according to their ious, also weight the positives 3x
+            weights[i, ious < MULTI_REF_IOU_THRESHOLD] = 1 - (ious[ious < MULTI_REF_IOU_THRESHOLD] / MULTI_REF_IOU_THRESHOLD)
+            weights[i, ious > MULTI_REF_IOU_THRESHOLD] = 3 * ious[ious > MULTI_REF_IOU_THRESHOLD]
 
     cluster_labels = torch.FloatTensor(labels).cuda()
 
     # reference loss
     criterion = SoftmaxRankingLoss()
+    if use_multi_ref_gt:
+        loss_weights = torch.FloatTensor(weights).cuda()
+        criterion = nn.BCEWithLogitsLoss(weight=loss_weights)
     loss = criterion(cluster_preds, cluster_labels.float().clone())
 
     return loss, cluster_preds, cluster_labels
@@ -385,7 +398,7 @@ def get_loss_detector(end_points, config, num_decoder_layers=6, query_points_gen
                       ref_loss_coef=0.1, lang_loss_coef=0.1, query_points_obj_topk=5, center_loss_type='smoothl1',
                       center_delta=1.0, size_loss_type='smoothl1', size_delta=1.0, heading_loss_type='smoothl1',
                       heading_delta=1.0, size_cls_agnostic=False, detection=True,reference=True,
-                      use_lang_classifier=False, use_votenet_objectness=False):
+                      use_lang_classifier=False, use_votenet_objectness=False, use_multi_ref_gt=False):
     """ Loss functions
     """
     if 'seeds_obj_cls_logits' in end_points.keys():
@@ -433,7 +446,7 @@ def get_loss_detector(end_points, config, num_decoder_layers=6, query_points_gen
 
     if reference:
         # Reference loss
-        ref_loss, _, cluster_labels = compute_reference_loss(end_points, config)
+        ref_loss, _, cluster_labels = compute_reference_loss(end_points, config, use_multi_ref_gt)
         end_points["cluster_labels"] = cluster_labels
         end_points["ref_loss"] = ref_loss
     else:

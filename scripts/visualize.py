@@ -489,7 +489,8 @@ def visualize(args):
             detection=True,
             reference=True,
             use_lang_classifier=(not args.no_lang_cls),
-            use_votenet_objectness=args.use_votenet_objectness
+            use_votenet_objectness=args.use_votenet_objectness,
+            use_multi_ref_gt=args.use_multi_ref_gt
         )
 
         data = get_eval(
@@ -529,6 +530,7 @@ if __name__ == "__main__":
 
     # loss related arguments
     parser.add_argument('--use_votenet_objectness', action="store_true", help='use objectness as it is used by VoteNet')
+    parser.add_argument('--use_multi_ref_gt', action="store_true", help='use multiple reference ground truths')
 
     parser.add_argument('--detection_loss_coef', default=1., type=float, help='loss weight for detection loss')  #TODO rename
     parser.add_argument('--ref_loss_coef', default=0.1, type=float, help='loss weight for ref loss')
