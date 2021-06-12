@@ -28,6 +28,8 @@ ITER_REPORT_TEMPLATE = """
 [loss] train_box_loss: {train_box_loss}
 [loss] train_lang_acc: {train_lang_acc}
 [sco.] train_ref_acc: {train_ref_acc}
+[sco.] train_ref_acc_gt_bbox_assignment: {train_ref_acc_gt_bbox_assignment}
+[sco.] train_ref_multi_precision: {train_ref_multi_precision}, train_ref_multi_recall: {train_ref_multi_recall}
 [sco.] train_ref_iou: {train_ref_iou}
 [sco.] train_obj_acc: {train_obj_acc}
 [sco.] train_sem_acc: {train_sem_acc}
@@ -51,6 +53,8 @@ EPOCH_REPORT_TEMPLATE = """
 [train] train_box_loss: {train_box_loss}
 [train] train_lang_acc: {train_lang_acc}
 [train] train_ref_acc: {train_ref_acc}
+[train] train_ref_acc_gt_bbox_assignment: {train_ref_acc_gt_bbox_assignment}
+[train] train_ref_multi_precision: {train_ref_multi_precision}, train_ref_multi_recall: {train_ref_multi_recall}
 [train] train_ref_iou: {train_ref_iou}
 [train] train_obj_acc: {train_obj_acc}
 [train] train_sem_acc: {train_sem_acc}
@@ -64,6 +68,8 @@ EPOCH_REPORT_TEMPLATE = """
 [val]   val_box_loss: {val_box_loss}
 [val]   val_lang_acc: {val_lang_acc}
 [val]   val_ref_acc: {val_ref_acc}
+[val]   val_ref_acc_gt_bbox_assignment: {val_ref_acc_gt_bbox_assignment}
+[val]   val_ref_multi_precision: {val_ref_multi_precision}, val_ref_multi_recall: {val_ref_multi_recall}
 [val]   val_ref_iou: {val_ref_iou}
 [val]   val_sem_acc: {val_sem_acc}
 [val]   val_pos_ratio: {val_pos_ratio}, val_neg_ratio: {val_neg_ratio}
@@ -81,6 +87,9 @@ BEST_REPORT_TEMPLATE = """
 [loss] box_loss: {box_loss}
 [loss] lang_acc: {lang_acc}
 [sco.] ref_acc: {ref_acc}
+[sco.] ref_acc_gt_bbox_assignment: {ref_acc_gt_bbox_assignment}
+[sco.] ref_multi_precision: {ref_multi_precision}
+[sco.] ref_multi_recall: {ref_multi_recall}
 [sco.] ref_iou: {ref_iou}
 [sco.] obj_acc: {obj_acc}
 [sco.] sem_acc: {sem_acc}
@@ -122,6 +131,9 @@ class Solver():
             "box_loss": float("inf"),
             "lang_acc": -float("inf"),
             "ref_acc": -float("inf"),
+            "ref_acc_gt_bbox_assignment": -float("inf"),
+            "ref_multi_precision": -float("inf"),
+            "ref_multi_recall": -float("inf"),
             "ref_iou": -float("inf"),
             "obj_acc": -float("inf"),
             "sem_acc": -float("inf"),
@@ -237,6 +249,9 @@ class Solver():
             # scores (float, not torch.cuda.FloatTensor)
             "lang_acc": [],
             "ref_acc": [],
+            "ref_acc_gt_bbox_assignment": [],
+            "ref_multi_precision": [],
+            "ref_multi_recall": [],
             "ref_iou": [],
             "obj_acc": [],
             "sem_acc": [],
@@ -302,12 +317,16 @@ class Solver():
             data_dict=data_dict,
             config=self.config,
             reference=self.reference,
-            use_lang_classifier=self.use_lang_classifier
+            use_lang_classifier=self.use_lang_classifier,
+            use_multi_ref_gt=self.loss_args["use_multi_ref_gt"]
         )
 
         # dump
         self._running_log["lang_acc"] = data_dict["lang_acc"].item()
         self._running_log["ref_acc"] = np.mean(data_dict["ref_acc"])
+        self._running_log["ref_acc_gt_bbox_assignment"] = np.mean(data_dict["ref_acc_gt_bbox_assignment"])
+        self._running_log["ref_multi_precision"] = np.mean(data_dict["ref_multi_precision"])
+        self._running_log["ref_multi_recall"] = np.mean(data_dict["ref_multi_recall"])
         self._running_log["ref_iou"] = np.mean(data_dict["ref_iou"])
         self._running_log["obj_acc"] = data_dict["obj_acc"].item()
         self._running_log["sem_acc"] = data_dict["sem_acc"].item()
@@ -343,6 +362,9 @@ class Solver():
                 # acc
                 "lang_acc": 0,
                 "ref_acc": 0,
+                "ref_acc_gt_bbox_assignment": 0,
+                "ref_multi_precision": 0,
+                "ref_multi_recall": 0,
                 "ref_iou": 0,
                 "obj_acc": 0,
                 "sem_acc": 0,
@@ -382,6 +404,9 @@ class Solver():
             self.log[phase]["box_loss"].append(self._running_log["box_loss"].item())
             self.log[phase]["lang_acc"].append(self._running_log["lang_acc"])
             self.log[phase]["ref_acc"].append(self._running_log["ref_acc"])
+            self.log[phase]["ref_acc_gt_bbox_assignment"].append(self._running_log["ref_acc_gt_bbox_assignment"])
+            self.log[phase]["ref_multi_precision"].append(self._running_log["ref_multi_precision"])
+            self.log[phase]["ref_multi_recall"].append(self._running_log["ref_multi_recall"])
             self.log[phase]["ref_iou"].append(self._running_log["ref_iou"])
             self.log[phase]["obj_acc"].append(self._running_log["obj_acc"])
             self.log[phase]["sem_acc"].append(self._running_log["sem_acc"])
@@ -435,6 +460,9 @@ class Solver():
                 self.best["box_loss"] = np.mean(self.log[phase]["box_loss"])
                 self.best["lang_acc"] = np.mean(self.log[phase]["lang_acc"])
                 self.best["ref_acc"] = np.mean(self.log[phase]["ref_acc"])
+                self.best["ref_acc_gt_bbox_assignment"] = np.mean(self.log[phase]["ref_acc_gt_bbox_assignment"])
+                self.best["ref_multi_precision"] = np.mean(self.log[phase]["ref_multi_precision"])
+                self.best["ref_multi_recall"] = np.mean(self.log[phase]["ref_multi_recall"])
                 self.best["ref_iou"] = np.mean(self.log[phase]["ref_iou"])
                 self.best["obj_acc"] = np.mean(self.log[phase]["obj_acc"])
                 self.best["sem_acc"] = np.mean(self.log[phase]["sem_acc"])
@@ -451,13 +479,14 @@ class Solver():
     def _dump_log(self, phase):
         log = {
             "loss": ["loss", "ref_loss", "lang_loss", "objectness_loss", "query_points_generation_loss", "box_loss"],
-            "score": ["lang_acc", "ref_acc", "ref_iou", "obj_acc", "sem_acc", "pos_ratio", "neg_ratio", "iou_rate_0.25", "iou_rate_0.5"]
+            "score": ["lang_acc", "ref_acc", "ref_acc_gt_bbox_assignment", "ref_multi_precision", "ref_multi_recall",
+                      "ref_iou", "obj_acc", "sem_acc", "pos_ratio", "neg_ratio", "iou_rate_0.25", "iou_rate_0.5"]
         }
         for key in log:
             for item in log[key]:
-                # TODO: instead of logging the average over the values of the epoch so far, wouldn't it be more
-                #  informative to log the stats of the last iteration. -> will be much noisier and spikier though,
-                #  especially with small batch sizes
+                # Instead of logging the average over the values of the epoch so far, we could log the stats of the last
+                # iteration. -> will be much noisier and spikier though especially with small batch sizes: just
+                # substitute all below with "log_value = self._running_log[item]"
                 values = np.array([v for v in self.log[phase][item]])
                 # remove nan
                 values = values[~np.isnan(values)]
@@ -465,7 +494,6 @@ class Solver():
                 # if we have a non-empty array with no infinite
                 if len(values) and not sum(np.isinf(values)):
                     log_value = np.nanmean(values)
-                #log_value = self._running_log[item]
                 self._log_writer[phase].add_scalar("{}/{}".format(key, item), log_value, self._global_iter_id)
 
     def _finish(self, epoch_id):
@@ -520,6 +548,9 @@ class Solver():
             train_box_loss=round(np.mean([v for v in self.log["train"]["box_loss"]]), 5),
             train_lang_acc=round(np.mean([v for v in self.log["train"]["lang_acc"]]), 5),
             train_ref_acc=round(np.mean([v for v in self.log["train"]["ref_acc"]]), 5),
+            train_ref_acc_gt_bbox_assignment=round(np.mean([v for v in self.log["train"]["ref_acc_gt_bbox_assignment"]]), 5),
+            train_ref_multi_precision=round(np.mean([v for v in self.log["train"]["ref_multi_precision"]]), 5),
+            train_ref_multi_recall=round(np.mean([v for v in self.log["train"]["ref_multi_recall"]]), 5),
             train_ref_iou=round(np.mean([v for v in self.log["train"]["ref_iou"]]), 5),
             train_obj_acc=round(np.mean([v for v in self.log["train"]["obj_acc"]]), 5),
             train_sem_acc=round(np.mean([v for v in self.log["train"]["sem_acc"]]), 5),
@@ -553,6 +584,9 @@ class Solver():
             train_box_loss=round(np.mean([v for v in self.log["train"]["box_loss"]]), 5),
             train_lang_acc=round(np.mean([v for v in self.log["train"]["lang_acc"]]), 5),
             train_ref_acc=round(np.mean([v for v in self.log["train"]["ref_acc"]]), 5),
+            train_ref_acc_gt_bbox_assignment=round(np.mean([v for v in self.log["train"]["ref_acc_gt_bbox_assignment"]]), 5),
+            train_ref_multi_precision=round(np.mean([v for v in self.log["train"]["ref_multi_precision"]]), 5),
+            train_ref_multi_recall=round(np.mean([v for v in self.log["train"]["ref_multi_recall"]]), 5),
             train_ref_iou=round(np.mean([v for v in self.log["train"]["ref_iou"]]), 5),
             train_obj_acc=round(np.mean([v for v in self.log["train"]["obj_acc"]]), 5),
             train_sem_acc=round(np.mean([v for v in self.log["train"]["sem_acc"]]), 5),
@@ -568,6 +602,9 @@ class Solver():
             val_box_loss=round(np.mean([v for v in self.log["val"]["box_loss"]]), 5),
             val_lang_acc=round(np.mean([v for v in self.log["val"]["lang_acc"]]), 5),
             val_ref_acc=round(np.mean([v for v in self.log["val"]["ref_acc"]]), 5),
+            val_ref_acc_gt_bbox_assignment=round(np.mean([v for v in self.log["val"]["ref_acc_gt_bbox_assignment"]]), 5),
+            val_ref_multi_precision=round(np.mean([v for v in self.log["val"]["ref_multi_precision"]]), 5),
+            val_ref_multi_recall=round(np.mean([v for v in self.log["val"]["ref_multi_recall"]]), 5),
             val_ref_iou=round(np.mean([v for v in self.log["val"]["ref_iou"]]), 5),
             val_obj_acc=round(np.mean([v for v in self.log["val"]["obj_acc"]]), 5),
             val_sem_acc=round(np.mean([v for v in self.log["val"]["sem_acc"]]), 5),
@@ -590,6 +627,9 @@ class Solver():
             box_loss=round(self.best["box_loss"], 5),
             lang_acc=round(self.best["lang_acc"], 5),
             ref_acc=round(self.best["ref_acc"], 5),
+            ref_acc_gt_bbox_assignment=round(self.best["ref_acc_gt_bbox_assignment"], 5),
+            ref_multi_precision=round(self.best["ref_multi_precision"], 5),
+            ref_multi_recall=round(self.best["ref_multi_recall"], 5),
             ref_iou=round(self.best["ref_iou"], 5),
             obj_acc=round(self.best["obj_acc"], 5),
             sem_acc=round(self.best["sem_acc"], 5),

@@ -42,7 +42,7 @@ def construct_bbox_corners(center, box_size):
 
 
 def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle=False, use_cat_rand=False,
-             use_best=False, post_processing=None):
+             use_best=False, post_processing=None, use_multi_ref_gt=False):
     """ Loss functions
 
     Args:
@@ -81,11 +81,31 @@ def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle
 
     # compute classification scores
     corrects = torch.sum((cluster_preds == 1) * (cluster_labels == 1), dim=1).float()
-    labels = torch.sum(cluster_labels == 1, dim=1).float()
+    labels = torch.ones(corrects.shape[0]).cuda()
     ref_acc = corrects / (labels + 1e-8)
 
     # store
     data_dict["ref_acc"] = ref_acc.cpu().numpy().tolist()
+
+    # other ref acc scores:
+
+    assigned_gt = torch.gather(data_dict["ref_box_label"], 1, data_dict["object_assignment"]).detach()
+    corrects = torch.sum((cluster_preds == 1) * (assigned_gt == 1), dim=1).float()
+    labels = torch.ones(corrects.shape[0]).cuda()
+    ref_acc_object_assignment = corrects / (labels + 1e-8)
+    data_dict["ref_acc_gt_bbox_assignment"] = ref_acc_object_assignment.cpu().numpy().tolist()
+
+    data_dict["ref_multi_precision"] = [0 for _ in range(len(ref_acc))]
+    data_dict["ref_multi_recall"] = [0 for _ in range(len(ref_acc))]
+    if use_multi_ref_gt:
+        ref_preds = (data_dict["cluster_ref"] > 0).float() * pred_masks
+        true_positives = torch.sum(((ref_preds == 1) * (cluster_labels == 1)).float(), dim=1)
+        false_positives = torch.sum(((ref_preds == 1) * (cluster_labels == 0)).float(), dim=1)
+        false_negatives = torch.sum(((ref_preds == 0) * (cluster_labels == 1)).float(), dim=1)
+        ref_multi_precision = true_positives / (true_positives + false_positives + 1e-8)
+        data_dict["ref_multi_precision"] = ref_multi_precision.cpu().numpy().tolist()
+        ref_multi_recall = true_positives / (true_positives + false_negatives + 1e-8)
+        data_dict["ref_multi_recall"] = ref_multi_recall.cpu().numpy().tolist()
 
     # compute localization metrics
     if use_best:
@@ -206,7 +226,7 @@ def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle
         data_dict["lang_acc"] = torch.zeros(1)[0].cuda()
 
     # store
-    data_dict["ref_iou"] = ious  # TODO: .cpu().numpy().tolist() ?
+    data_dict["ref_iou"] = ious
 
     data_dict["ref_iou_rate_0.25"] = np.array(ious)[np.array(ious) >= 0.25].shape[0] / np.array(ious).shape[0]
     data_dict["ref_iou_rate_0.5"] = np.array(ious)[np.array(ious) >= 0.5].shape[0] / np.array(ious).shape[0]
