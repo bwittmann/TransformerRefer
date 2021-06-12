@@ -386,7 +386,7 @@ def compute_reference_loss(data_dict, config, use_multi_ref_gt=False):
     criterion = SoftmaxRankingLoss()
     if use_multi_ref_gt:
         # multiply by X to get comparable magnitude
-        loss_weights = torch.FloatTensor(10 * weights).cuda()
+        loss_weights = torch.FloatTensor(5 * weights).cuda()
         criterion = nn.BCEWithLogitsLoss(weight=loss_weights)
     loss = criterion(cluster_preds, cluster_labels.float().clone())
 
