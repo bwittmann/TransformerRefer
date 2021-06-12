@@ -366,20 +366,25 @@ def compute_reference_loss(data_dict, config, use_multi_ref_gt=False):
         pred_bbox_batch = get_3d_box_batch(pred_obb_batch[:, 3:6], pred_obb_batch[:, 6], pred_obb_batch[:, 0:3])
         ious = box3d_iou_batch(pred_bbox_batch, np.tile(gt_bbox_batch[i], (num_proposals, 1, 1)))
         max_idx = ious.argmax()
-        labels[i, max_idx] = 1  # treat the bbox with highest iou score as the gt
         if use_multi_ref_gt:
             # set all predicted bboxes with iou over threshold as gt for the ref box
             labels[i, ious > MULTI_REF_IOU_THRESHOLD] = 1
-            # weight the ref scores according to their ious, also weight the positives 3x
-            weights[i, ious < MULTI_REF_IOU_THRESHOLD] = 1 - (ious[ious < MULTI_REF_IOU_THRESHOLD] / MULTI_REF_IOU_THRESHOLD)
-            weights[i, ious > MULTI_REF_IOU_THRESHOLD] = 3 * ious[ious > MULTI_REF_IOU_THRESHOLD]
+            num_gt = labels[i, :].sum()
+            # weight the ref scores according to their ious and scale by inbalance,
+            # the negatives -> if close to iou threshold almost 0 weight, if 0 iou 1 weight
+            weights[i, ious < MULTI_REF_IOU_THRESHOLD] = (num_proposals / (num_proposals - num_gt + 1e-8)) * (1 - (ious[ious < MULTI_REF_IOU_THRESHOLD] / MULTI_REF_IOU_THRESHOLD))
+            weights[i, ious > MULTI_REF_IOU_THRESHOLD] = (1 / ious[max_idx]) * (num_proposals / (num_gt + 1e-8)) * ious[ious > MULTI_REF_IOU_THRESHOLD]
+        else:
+            # treat the bbox with highest iou score as the gt
+            labels[i, max_idx] = 1
 
     cluster_labels = torch.FloatTensor(labels).cuda()
 
     # reference loss
     criterion = SoftmaxRankingLoss()
     if use_multi_ref_gt:
-        loss_weights = torch.FloatTensor(weights).cuda()
+        # multiply by 5 to get comparable magnitude
+        loss_weights = torch.FloatTensor(5 * weights).cuda()
         criterion = nn.BCEWithLogitsLoss(weight=loss_weights)
     loss = criterion(cluster_preds, cluster_labels.float().clone())
 
