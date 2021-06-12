@@ -375,7 +375,7 @@ def compute_reference_loss(data_dict, config, use_multi_ref_gt=False):
             neg_scale = (num_proposals / (num_proposals - num_gt + 1e-8))
             pos_scale = (num_proposals / (num_gt + 1e-8))
             weights[i, ious < MULTI_REF_IOU_THRESHOLD] = neg_scale * (1 - (ious[ious < MULTI_REF_IOU_THRESHOLD] / MULTI_REF_IOU_THRESHOLD))
-            weights[i, ious > MULTI_REF_IOU_THRESHOLD] = pos_scale * (1 / ious[max_idx]) * ious[ious > MULTI_REF_IOU_THRESHOLD]
+            weights[i, ious > MULTI_REF_IOU_THRESHOLD] = pos_scale * (1 / ious[max_idx] + 1e-8) * ious[ious > MULTI_REF_IOU_THRESHOLD]
         else:
             # treat the bbox with highest iou score as the gt
             labels[i, max_idx] = 1
