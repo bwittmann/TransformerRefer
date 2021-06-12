@@ -352,7 +352,6 @@ def dump_results(args, scanrefer, data, config, include_best_pred_box_ref):
     
     # from network outputs
     # detection
-    #pred_objectness = torch.argmax(data['objectness_scores'], 2).float().detach().cpu().numpy()
     pred_objectness = (data['objectness_scores'] > 0).squeeze(2).float().detach().cpu().numpy()
     pred_center = data['center'].detach().cpu().numpy() # (B,K,3)
     pred_heading_class = torch.argmax(data['heading_scores'], -1) # B,num_proposal
@@ -364,8 +363,10 @@ def dump_results(args, scanrefer, data, config, include_best_pred_box_ref):
     pred_size_residual = pred_size_residual.squeeze(2).detach().cpu().numpy() # B,num_proposal,3
     # reference
     pred_ref_scores = data["cluster_ref"].detach().cpu().numpy()
-    #pred_ref_scores_softmax = F.softmax(data["cluster_ref"] * torch.argmax(data['objectness_scores'], 2).float() * data['pred_mask'], dim=1).detach().cpu().numpy()
-    pred_ref_scores_softmax = F.softmax(data["cluster_ref"] * (data['objectness_scores'] > 0).squeeze(2).float() * data['pred_mask'], dim=1).detach().cpu().numpy()
+    if args.use_multi_ref_gt:
+        pred_ref_scores_prob = F.sigmoid(data["cluster_ref"] * (data['objectness_scores'] > 0).squeeze(2).float() * data['pred_mask']).detach().cpu().numpy()
+    else:
+        pred_ref_scores_prob = F.softmax(data["cluster_ref"] * (data['objectness_scores'] > 0).squeeze(2).float() * data['pred_mask'], dim=1).detach().cpu().numpy()
     # post-processing
     nms_masks = data['pred_mask'].detach().cpu().numpy() # B,num_proposal
     
@@ -416,7 +417,6 @@ def dump_results(args, scanrefer, data, config, include_best_pred_box_ref):
         pred_masks = nms_masks[i] * pred_objectness[i] == 1
         assert pred_ref_scores[i].shape[0] == pred_center[i].shape[0]
         pred_ref_idx = np.argmax(pred_ref_scores[i] * pred_masks, 0)
-        assigned_gt = torch.gather(data["ref_box_label"], 1, data["object_assignment"]).detach().cpu().numpy()  # TODO: use in eval_helper as one of the many ref_accs
 
         # visualize the predicted reference box
         pred_obb = config.param2obb(pred_center[i, pred_ref_idx, 0:3], pred_heading_class[i, pred_ref_idx], pred_heading_residual[i, pred_ref_idx],
@@ -424,7 +424,7 @@ def dump_results(args, scanrefer, data, config, include_best_pred_box_ref):
         pred_bbox = get_3d_box(pred_obb[3:6], pred_obb[6], pred_obb[0:3])
         iou = box3d_iou(gt_bbox, pred_bbox)
 
-        write_bbox(pred_obb, 1, os.path.join(scene_dump_dir, 'pred_{}_{}_{}_{:.5f}_{:.5f}.ply'.format(object_id, object_name, ann_id, pred_ref_scores_softmax[i, pred_ref_idx], iou)))
+        write_bbox(pred_obb, 1, os.path.join(scene_dump_dir, 'pred_{}_{}_{}_{:.5f}_{:.5f}.ply'.format(object_id, object_name, ann_id, pred_ref_scores_prob[i, pred_ref_idx], iou)))
 
         if not include_best_pred_box_ref:
             continue
@@ -498,7 +498,8 @@ def visualize(args):
             config=DC,
             reference=True, 
             use_lang_classifier=(not args.no_lang_cls),
-            post_processing=POST_DICT
+            post_processing=POST_DICT,
+            use_multi_ref_gt=args.use_multi_ref_gt
         )
         
         # visualize
