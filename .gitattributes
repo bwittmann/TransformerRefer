@@ -1,0 +1,7 @@
+outputs/GFDetector/scannet_w2xl120512.pth filter=lfs diff=lfs merge=lfs -text
+outputs/GFDetector/scannet_l12o256.pth filter=lfs diff=lfs merge=lfs -text
+outputs/GFDetector/scannet_l6o256.pth filter=lfs diff=lfs merge=lfs -text
+outputs/GFDetector/scannet_w2xl120256.pth filter=lfs diff=lfs merge=lfs -text
+outputs/ScanRefer/XYZ_COLOR_NORMAL filter=lfs diff=lfs merge=lfs -text
+outputs/ScanRefer/XYZ filter=lfs diff=lfs merge=lfs -text
+outputs/ScanRefer/XYZ_COLOR filter=lfs diff=lfs merge=lfs -text
