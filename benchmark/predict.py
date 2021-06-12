@@ -39,15 +39,33 @@ def get_model(args, config):
     # load model
     input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(not args.no_height)
 
+    detector_args = {
+        'width': args.width,
+        'bn_momentum': args.bn_momentum,
+        'sync_bn': args.sync_bn,
+        'dropout': args.dropout,
+        'activation': args.activation,
+        'nhead': args.nhead,
+        'num_decoder_layers': args.num_decoder_layers,
+        'dim_feedforward': args.dim_feedforward,
+        'cross_position_embedding': args.cross_position_embedding,
+        'size_cls_agnostic': args.size_cls_agnostic,
+        'num_proposals': args.num_proposals,
+        'sampling': args.sampling,
+        'self_position_embedding': args.self_position_embedding
+    }
+
     model = RefNetV2(
         num_class=config.num_class,
         num_heading_bin=config.num_heading_bin,
         num_size_cluster=config.num_size_cluster,
         mean_size_arr=config.mean_size_arr,
-        num_proposal=args.num_proposals,
         input_feature_dim=input_channels,
         use_lang_classifier=(not args.no_lang_cls),
-        use_bidir=args.use_bidir
+        use_bidir=args.use_bidir,
+        emb_size=args.emb_size,
+        detector_args=detector_args,
+        use_multi_ref_gt=args.use_multi_ref_gt
     ).cuda()
 
     model_name = "model.pth"
@@ -189,8 +207,30 @@ if __name__ == "__main__":
     parser.add_argument("--use_color", action="store_true", help="Use RGB color in input.")
     parser.add_argument("--use_normal", action="store_true", help="Use RGB color in input.")
     parser.add_argument("--use_multiview", action="store_true", help="Use multiview images.")
+    parser.add_argument("--emb_size", type=int, default=300, help="input size to GRU")
     parser.add_argument("--use_bidir", action="store_true", help="Use bi-directional GRU.")
+    parser.add_argument("--use_multi_ref_gt", action="store_true", help="use multiple reference ground truths")
     args = parser.parse_args()
+
+    # detector related arguments
+    parser.add_argument("--num_proposals", type=int, default=256, help="proposal number")
+    parser.add_argument("--width", type=int, default=1, help="PointNet backbone width ratio")
+    parser.add_argument("--bn_momentum", type=float, default=0.1, help="batchnorm momentum")
+    parser.add_argument("--sync_bn", action="store_true", help="converts all bn layers in SyncBatchNorm layers")
+    parser.add_argument("--dropout", type=float, default=0.1, help="dropout probability")
+    parser.add_argument("--activation", type=str, default='relu', choices=["relu", "gelu", "glu"],
+                        help="activation fct used in the decoder layers")
+    parser.add_argument("--nhead", type=int, default=8, help="parallel attention heads in multihead attention")
+    parser.add_argument("--num_decoder_layers", type=int, default=6, help="number of decoder layers")
+    parser.add_argument("--dim_feedforward", type=int, default=2048,
+                        help="hidden size of the linear layers in the decoder")
+    parser.add_argument("--cross_position_embedding", type=str, default='xyz_learned', choices=["none", "xyz_learned"],
+                        help="position embedding for cross-attention")
+    parser.add_argument("--self_position_embedding", type=str, default='loc_learned',
+                        choices=["none", "xyz_learned", "loc_learned"],
+                        help="position embedding for self-attention")
+    parser.add_argument("--size_cls_agnostic", action="store_true", help="use class agnostic predict heads")
+    parser.add_argument("--sampling", type=str, default="kps", help="initial object candidate sampling")
 
     # setting
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
