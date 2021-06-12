@@ -11,7 +11,7 @@ from models.detector import GroupFreeDetector
 class RefNetV2(nn.Module):
     def __init__(self, num_class, num_heading_bin, num_size_cluster, mean_size_arr, 
                  input_feature_dim, use_lang_classifier, use_bidir, emb_size,
-                 detector_args, no_reference=False, hidden_size=256):
+                 detector_args, no_reference=False, hidden_size=256, use_multi_ref_gt=False):
         super().__init__()
 
         assert(mean_size_arr.shape[0] == num_size_cluster)    
@@ -48,7 +48,7 @@ class RefNetV2(nn.Module):
 
             # --------- PROPOSAL MATCHING ---------
             # Match the generated proposals and select the most confident ones
-            self.match = MatchModule(num_proposals=detector_args['num_proposals'], lang_size=(1 + int(use_bidir)) * hidden_size)
+            self.match = MatchModule(num_proposals=detector_args['num_proposals'], lang_size=(1 + int(use_bidir)) * hidden_size, use_multi_ref_gt=use_multi_ref_gt)
 
     def forward(self, data_dict):
         """ Forward pass of the network

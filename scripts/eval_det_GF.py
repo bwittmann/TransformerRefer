@@ -91,7 +91,8 @@ def get_model(args, config):
         use_lang_classifier=(not args.no_lang_cls),
         use_bidir=args.use_bidir,
         detector_args=detector_args,
-        emb_size=args.emb_size
+        emb_size=args.emb_size,
+        use_multi_ref_gt=args.use_multi_ref_gt
     ).cuda()
 
     model_name = "model.pth"
@@ -262,6 +263,7 @@ def parse_option():
     parser.add_argument("--emb_size", type=int, default=300, help="input size to GRU")
     parser.add_argument("--use_votenet_objectness", action="store_true",
                         help="Use VoteNet's objectness labeling with transformer object detection")
+    parser.add_argument("--use_multi_ref_gt", action="store_true", help="use multiple reference ground truths")
 
     # detector related arguments
     parser.add_argument("--num_proposals", type=int, default=256, help="proposal number")

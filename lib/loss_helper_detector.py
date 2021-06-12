@@ -355,8 +355,6 @@ def compute_reference_loss(data_dict, config, use_multi_ref_gt=False):
     gt_obb_batch = config.param2obb_batch(gt_center[:, 0:3], gt_heading_class, gt_heading_residual, gt_size_class, gt_size_residual)
     gt_bbox_batch = get_3d_box_batch(gt_obb_batch[:, 3:6], gt_obb_batch[:, 6], gt_obb_batch[:, 0:3])
 
-    objectness_masks = (data_dict['objectness_scores'] > 0).float().squeeze(2).detach().cpu().numpy()  # batch_size, num_proposals
-
     # compute the iou score for all predicted positive ref
     batch_size, num_proposals = cluster_preds.shape
     labels = np.zeros((batch_size, num_proposals))
@@ -371,17 +369,13 @@ def compute_reference_loss(data_dict, config, use_multi_ref_gt=False):
         if use_multi_ref_gt:
             # set all predicted bboxes with iou over threshold as gt for the ref box
             labels[i, ious > MULTI_REF_IOU_THRESHOLD] = 1
-            # mask out with objectness, since where no objectness, it won't be able to distinguish anyway -> were set to zero
-            labels[i, objectness_masks[i, :] == 0] = 0
             num_gt = labels[i, :].sum()
-            num_total = objectness_masks[i, :].sum()
             # weigh the ref scores according to their ious and scale by inbalance,
             # the negatives -> if close to iou threshold almost 0 weight, if 0 iou 1 weight
-            neg_scale = (num_total / (num_total - num_gt + 1e-8))
-            pos_scale = (num_total / (num_gt + 1e-8))
+            neg_scale = (num_proposals / (num_proposals - num_gt + 1e-8))
+            pos_scale = (num_proposals / (num_gt + 1e-8))
             weights[i, ious < MULTI_REF_IOU_THRESHOLD] = neg_scale * (1 - (ious[ious < MULTI_REF_IOU_THRESHOLD] / MULTI_REF_IOU_THRESHOLD))
             weights[i, ious > MULTI_REF_IOU_THRESHOLD] = pos_scale * (1 / ious[max_idx]) * ious[ious > MULTI_REF_IOU_THRESHOLD]
-            weights[i, objectness_masks[i, :] == 0] = neg_scale * 0.2
         else:
             # treat the bbox with highest iou score as the gt
             labels[i, max_idx] = 1

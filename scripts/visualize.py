@@ -77,7 +77,8 @@ def get_model(args):
         use_bidir=args.use_bidir,
         no_reference=args.no_reference,
         detector_args=detector_args,
-        emb_size=args.emb_size
+        emb_size=args.emb_size,
+        use_multi_ref_gt=args.use_multi_ref_gt
     ).cuda()
 
     path = os.path.join(CONF.PATH.OUTPUT, args.folder, "model.pth")
