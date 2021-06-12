@@ -183,7 +183,8 @@ def eval_ref(args):
                     use_oracle=args.use_oracle,
                     use_cat_rand=args.use_cat_rand,
                     use_best=args.use_best,
-                    post_processing=POST_DICT
+                    post_processing=POST_DICT,
+                    use_multi_ref_gt=args.use_multi_ref_gt
                 )
 
                 ious += data["ref_iou"]
@@ -430,7 +431,8 @@ def eval_det(args):
                 data_dict=data, 
                 config=DC, 
                 reference=False,
-                post_processing=POST_DICT
+                post_processing=POST_DICT,
+                use_multi_ref_gt=args.use_multi_ref_gt
             )
 
         sem_acc.append(data["sem_acc"].item())
