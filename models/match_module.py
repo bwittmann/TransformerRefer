@@ -2,12 +2,14 @@ import torch
 import torch.nn as nn
 
 class MatchModule(nn.Module):
-    def __init__(self, num_proposals=256, lang_size=256, hidden_size=128):
+    def __init__(self, num_proposals=256, lang_size=256, hidden_size=128, use_multi_ref_gt=False):
         super().__init__() 
 
         self.num_proposals = num_proposals
         self.lang_size = lang_size
         self.hidden_size = hidden_size
+
+        self.use_multi_ref_gt = use_multi_ref_gt
         
         self.fuse = nn.Sequential(
             nn.Conv1d(self.lang_size + 288, hidden_size, 1),
@@ -49,13 +51,18 @@ class MatchModule(nn.Module):
 
         # fuse features
         ref_features = self.fuse(ref_features) # batch_size, hidden_size, num_proposals
-        
-        # mask out invalid proposals
-        objectness_masks = objectness_masks.permute(0, 2, 1).contiguous() # batch_size, 1, num_proposals
-        ref_features = ref_features * objectness_masks
+
+        if not self.use_multi_ref_gt:
+            # mask out invalid proposals
+            objectness_masks = objectness_masks.permute(0, 2, 1).contiguous() # batch_size, 1, num_proposals
+            ref_features = ref_features * objectness_masks
 
         # match
         confidences = self.match(ref_features).squeeze(1) # batch_size, num_proposals
+
+        if not self.use_multi_ref_gt:
+            # NOTE make sure again the empty boxes won't be part of the discrimination
+            confidences.masked_fill_(objectness_masks.squeeze(1) == 0, float('-1e30'))
 
         data_dict["cluster_ref"] = confidences
 

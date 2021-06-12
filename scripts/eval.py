@@ -68,7 +68,8 @@ def get_model(args, config):
         use_lang_classifier=(not args.no_lang_cls),
         use_bidir=args.use_bidir,
         detector_args=detector_args,
-        emb_size=args.emb_size
+        emb_size=args.emb_size,
+        use_multi_ref_gt=args.use_multi_ref_gt
     ).cuda()
     
     model_name = "model_last.pth" if args.detection else "model.pth"

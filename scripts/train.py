@@ -78,7 +78,8 @@ def get_model(args):
         use_bidir=args.use_bidir,
         no_reference=args.no_reference,
         detector_args=detector_args,
-        emb_size=args.emb_size
+        emb_size=args.emb_size,
+        use_multi_ref_gt=args.use_multi_ref_gt
     )
 
     # pretrained transformer directly from GroupFreeDetector weights
@@ -135,7 +136,8 @@ def get_model(args):
             use_bidir=args.use_bidir,
             no_reference=args.no_reference,
             detector_args=detector_args,
-            emb_size=args.emb_size
+            emb_size=args.emb_size,
+            use_multi_ref_gt=args.use_multi_ref_gt
         )
 
         pretrained_path = os.path.join(CONF.PATH.OUTPUT, args.use_pretrained, "model_last.pth")
