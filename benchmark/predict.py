@@ -52,7 +52,8 @@ def get_model(args, config):
         'size_cls_agnostic': args.size_cls_agnostic,
         'num_proposals': args.num_proposals,
         'sampling': args.sampling,
-        'self_position_embedding': args.self_position_embedding
+        'self_position_embedding': args.self_position_embedding,
+        'num_features' : args.num_features
     }
 
     model = RefNetV2(
@@ -231,6 +232,7 @@ if __name__ == "__main__":
                         help="position embedding for self-attention")
     parser.add_argument("--size_cls_agnostic", action="store_true", help="use class agnostic predict heads")
     parser.add_argument("--sampling", type=str, default="kps", help="initial object candidate sampling")
+    parser.add_argument("--num_features", type=int, default=288, help="number of features of the object proposals")
 
     # setting
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
