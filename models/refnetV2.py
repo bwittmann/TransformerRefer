@@ -37,7 +37,8 @@ class RefNetV2(nn.Module):
             dim_feedforward=detector_args['dim_feedforward'], 
             self_position_embedding=detector_args['self_position_embedding'],
             cross_position_embedding=detector_args['cross_position_embedding'],
-            size_cls_agnostic=detector_args['size_cls_agnostic']
+            size_cls_agnostic=detector_args['size_cls_agnostic'],
+            num_features=detector_args['num_features']
         )
         
         if not no_reference:
@@ -48,7 +49,10 @@ class RefNetV2(nn.Module):
 
             # --------- PROPOSAL MATCHING ---------
             # Match the generated proposals and select the most confident ones
-            self.match = MatchModule(num_proposals=detector_args['num_proposals'], lang_size=(1 + int(use_bidir)) * hidden_size, use_multi_ref_gt=use_multi_ref_gt)
+            self.match = MatchModule(
+                num_proposals=detector_args['num_proposals'], lang_size=(1 + int(use_bidir)) * hidden_size, 
+                use_multi_ref_gt=use_multi_ref_gt, num_features=detector_args['num_features']
+            )
 
     def forward(self, data_dict):
         """ Forward pass of the network

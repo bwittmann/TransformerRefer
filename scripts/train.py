@@ -18,6 +18,7 @@ from lib.solver import Solver
 from lib.config import CONF
 from models.refnetV2 import RefNetV2
 from models.detector import GroupFreeDetector
+from models.backbone_module import Pointnet2Backbone
 from utils.lr_scheduler import get_scheduler
 
 SCANREFER_TRAIN = json.load(open(os.path.join(CONF.PATH.DATA, "ScanRefer_filtered_train.json")))
@@ -65,7 +66,8 @@ def get_model(args):
         'size_cls_agnostic' : args.size_cls_agnostic,
         'num_proposals' : args.num_proposals,
         'sampling' : args.sampling,
-        'self_position_embedding' : args.self_position_embedding
+        'self_position_embedding' : args.self_position_embedding,
+        'num_features' : args.num_features
     }
 
     model = RefNetV2(
@@ -82,49 +84,9 @@ def get_model(args):
         use_multi_ref_gt=args.use_multi_ref_gt
     )
 
-    # pretrained transformer directly from GroupFreeDetector weights
-    if args.use_pretrained_transformer:
-        # load model
-        print("loading pretrained GroupFreeDetector...")
-
-        pretrained_detector = GroupFreeDetector(
-            num_class=DC.num_class,
-            num_heading_bin=DC.num_heading_bin,
-            num_size_cluster=DC.num_size_cluster,
-            mean_size_arr=DC.mean_size_arr,
-            input_feature_dim=input_channels,
-            width= detector_args['width'],
-            bn_momentum= detector_args['bn_momentum'], 
-            sync_bn= detector_args['sync_bn'], 
-            num_proposal=detector_args['num_proposals'],
-            sampling=detector_args['sampling'],
-            dropout=detector_args['dropout'],
-            activation=detector_args['activation'], 
-            nhead=detector_args['nhead'], 
-            num_decoder_layers=detector_args['num_decoder_layers'],
-            dim_feedforward=detector_args['dim_feedforward'], 
-            self_position_embedding=detector_args['self_position_embedding'],
-            cross_position_embedding=detector_args['cross_position_embedding'],
-            size_cls_agnostic=detector_args['size_cls_agnostic']
-        )
-
-        # model created with nn.DataParallel -> need to create new ordered dict and remove "module" prefix
-        checkpoint = torch.load(args.use_pretrained_transformer, map_location='cpu')
-        new_state_dict = OrderedDict()
-        for k, v in checkpoint['model'].items():
-            name = k[7:]  # remove `module.`
-            new_state_dict[name] = v
-        pretrained_detector.load_state_dict(new_state_dict)
-        del checkpoint
-        torch.cuda.empty_cache()
-
-        model.detector = pretrained_detector
-
     # from pretrained scanrefer model with transformer
-    elif args.use_pretrained:
-        # load model
+    if args.use_pretrained:
         print("loading pretrained ScanRefer with Group Free Transformer detection...")
-
 
         pretrained_model = RefNetV2(
             num_class=DC.num_class,
@@ -145,6 +107,66 @@ def get_model(args):
 
         # mount
         model.detector = pretrained_model.detector
+
+    # pretrained transformer directly from GroupFreeDetector weights
+    if args.use_pretrained_transformer:
+        # pretrained detector uses feature dim of 288 exclusively
+        assert args.num_features == 288
+
+        print("loading pretrained GroupFreeDetector...")
+
+        pretrained_detector = GroupFreeDetector(
+            num_class=DC.num_class,
+            num_heading_bin=DC.num_heading_bin,
+            num_size_cluster=DC.num_size_cluster,
+            mean_size_arr=DC.mean_size_arr,
+            input_feature_dim=0,
+            width= detector_args['width'],
+            bn_momentum= detector_args['bn_momentum'], 
+            sync_bn= detector_args['sync_bn'], 
+            num_proposal=detector_args['num_proposals'],
+            sampling=detector_args['sampling'],
+            dropout=detector_args['dropout'],
+            activation=detector_args['activation'], 
+            nhead=detector_args['nhead'], 
+            num_decoder_layers=detector_args['num_decoder_layers'],
+            dim_feedforward=detector_args['dim_feedforward'], 
+            self_position_embedding=detector_args['self_position_embedding'],
+            cross_position_embedding=detector_args['cross_position_embedding'],
+            size_cls_agnostic=detector_args['size_cls_agnostic'],
+            num_features=detector_args['num_features']
+        )
+
+        # model created with nn.DataParallel -> need to create new ordered dict and remove "module" prefix
+        checkpoint = torch.load(args.use_pretrained_transformer, map_location='cpu')
+        new_state_dict = OrderedDict()
+        for k, v in checkpoint['model'].items():
+            name = k[7:]  # remove `module.`
+            new_state_dict[name] = v
+        pretrained_detector.load_state_dict(new_state_dict)
+        del checkpoint
+        torch.cuda.empty_cache()
+
+        model.detector = pretrained_detector
+
+
+    # load pretrained backbone
+    if args.use_pretrained_backbone:
+        # pretrained backbone has output size of 256
+        assert args.num_features == 256
+
+        print("loading pretrained Pointnet2Backbone...")
+
+        pretrained_backbone = Pointnet2Backbone(input_channels, 256)
+        backbone_state_dict = torch.load(args.use_pretrained_backbone, map_location='cpu')
+        
+        new_state_dict = OrderedDict((k[13:], v) for k, v in backbone_state_dict.items() if k[:4] == 'back')
+        pretrained_backbone.load_state_dict(new_state_dict)
+
+        del backbone_state_dict
+        torch.cuda.empty_cache()
+
+        model.detector.backbone_net = pretrained_backbone
 
     # freeze parts of the detector
     if args.no_detection:
@@ -406,6 +428,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--use_pretrained", type=str, help="specify the folder name in outputs containing the pretrained model")
     parser.add_argument("--use_pretrained_transformer", type=str, help="specify the absolute file path for pretrained GroupFreeDetector module")    #TODO rename
+    parser.add_argument("--use_pretrained_backbone", type=str, help="specify the absolute file path for pretrained pointnet++ backbone")
     parser.add_argument("--use_checkpoint", type=str, help="specify the checkpoint root", default="")
 
     parser.add_argument("--freeze_transformer_layers", type=str, default="none",  help="do NOT train parts of the trans. detection module",
@@ -457,6 +480,7 @@ if __name__ == "__main__":
     parser.add_argument("--activation", type=str, default='relu', choices=["relu", "gelu", "glu"], help="activation fct used in the decoder layers")
     parser.add_argument("--nhead", type=int, default=8, help="parallel attention heads in multihead attention")
     parser.add_argument("--num_decoder_layers", type=int, default=6, help="number of decoder layers")
+    parser.add_argument("--num_features", type=int, default=288, help="number of features of the object proposals")
     parser.add_argument("--dim_feedforward", type=int, default=2048, help="hidden size of the linear layers in the decoder")
     parser.add_argument("--cross_position_embedding", type=str, default='xyz_learned', choices=["none", "xyz_learned"], 
                         help="position embedding for cross-attention")

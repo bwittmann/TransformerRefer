@@ -17,7 +17,7 @@ class Pointnet2Backbone(nn.Module):
             Number of input channels in the feature descriptor for each point.
             e.g. 3 for RGB.
     """
-    def __init__(self, input_feature_dim=0):
+    def __init__(self, input_feature_dim=0, output_feature_dim=288):
         super().__init__()
 
         self.input_feature_dim = input_feature_dim
@@ -61,7 +61,7 @@ class Pointnet2Backbone(nn.Module):
 
         # --------- 2 FEATURE UPSAMPLING LAYERS --------
         self.fp1 = PointnetFPModule(mlp=[256+256,256,256])
-        self.fp2 = PointnetFPModule(mlp=[256+256,256,288])
+        self.fp2 = PointnetFPModule(mlp=[256+256,256,output_feature_dim])
 
 
     def _break_up_pc(self, pc):

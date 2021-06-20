@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class MatchModule(nn.Module):
-    def __init__(self, num_proposals=256, lang_size=256, hidden_size=128, use_multi_ref_gt=False):
+    def __init__(self, num_proposals=256, lang_size=256, hidden_size=128, use_multi_ref_gt=False, num_features=288):
         super().__init__() 
 
         self.num_proposals = num_proposals
@@ -12,7 +12,7 @@ class MatchModule(nn.Module):
         self.use_multi_ref_gt = use_multi_ref_gt
         
         self.fuse = nn.Sequential(
-            nn.Conv1d(self.lang_size + 288, hidden_size, 1),
+            nn.Conv1d(self.lang_size + num_features, hidden_size, 1),
             nn.ReLU()
         )
 

@@ -37,7 +37,7 @@ class GroupFreeDetector(nn.Module):
     def __init__(self, num_class, num_heading_bin, num_size_cluster, mean_size_arr,
                  input_feature_dim=0, width=1, bn_momentum=0.1, sync_bn=False, num_proposal=128, sampling='kps',
                  dropout=0.1, activation="relu", nhead=8, num_decoder_layers=6, dim_feedforward=2048,
-                 self_position_embedding='loc_learned', cross_position_embedding='xyz_learned',
+                 self_position_embedding='loc_learned', cross_position_embedding='xyz_learned', num_features=288,
                  size_cls_agnostic=False):
         super().__init__()
 
@@ -65,23 +65,23 @@ class GroupFreeDetector(nn.Module):
         if self.sampling == 'fps':
             self.fps_module = FPSModule(num_proposal)
         elif self.sampling == 'kps':
-            self.points_obj_cls = PointsObjClsModule(288)
+            self.points_obj_cls = PointsObjClsModule(num_features)
             self.gsample_module = GeneralSamplingModule()
         else:
             raise NotImplementedError
         # Proposal
         if self.size_cls_agnostic:
-            self.proposal_head = ClsAgnosticPredictHead(num_class, num_heading_bin, num_proposal, 288)
+            self.proposal_head = ClsAgnosticPredictHead(num_class, num_heading_bin, num_proposal, num_features)
         else:
             self.proposal_head = PredictHead(num_class, num_heading_bin, num_size_cluster,
-                                             mean_size_arr, num_proposal, 288)
+                                             mean_size_arr, num_proposal, num_features)
         if self.num_decoder_layers <= 0:
             # stop building if has no decoder layer
             return
 
         # Transformer Decoder Projection
-        self.decoder_key_proj = nn.Conv1d(288, 288, kernel_size=1)
-        self.decoder_query_proj = nn.Conv1d(288, 288, kernel_size=1)
+        self.decoder_key_proj = nn.Conv1d(num_features, num_features, kernel_size=1)
+        self.decoder_query_proj = nn.Conv1d(num_features, num_features, kernel_size=1)
 
         # Position Embedding for Self-Attention
         if self.self_position_embedding == 'none':
@@ -89,11 +89,11 @@ class GroupFreeDetector(nn.Module):
         elif self.self_position_embedding == 'xyz_learned':
             self.decoder_self_posembeds = nn.ModuleList()
             for i in range(self.num_decoder_layers):
-                self.decoder_self_posembeds.append(PositionEmbeddingLearned(3, 288))
+                self.decoder_self_posembeds.append(PositionEmbeddingLearned(3, num_features))
         elif self.self_position_embedding == 'loc_learned':
             self.decoder_self_posembeds = nn.ModuleList()
             for i in range(self.num_decoder_layers):
-                self.decoder_self_posembeds.append(PositionEmbeddingLearned(6, 288))
+                self.decoder_self_posembeds.append(PositionEmbeddingLearned(6, num_features))
         else:
             raise NotImplementedError(f"self_position_embedding not supported {self.self_position_embedding}")
 
@@ -103,7 +103,7 @@ class GroupFreeDetector(nn.Module):
         elif self.cross_position_embedding == 'xyz_learned':
             self.decoder_cross_posembeds = nn.ModuleList()
             for i in range(self.num_decoder_layers):
-                self.decoder_cross_posembeds.append(PositionEmbeddingLearned(3, 288))
+                self.decoder_cross_posembeds.append(PositionEmbeddingLearned(3, num_features))
         else:
             raise NotImplementedError(f"cross_position_embedding not supported {self.cross_position_embedding}")
 
@@ -112,7 +112,7 @@ class GroupFreeDetector(nn.Module):
         for i in range(self.num_decoder_layers):
             self.decoder.append(
                 TransformerDecoderLayer(
-                    288, nhead, dim_feedforward, dropout, activation,
+                    num_features, nhead, dim_feedforward, dropout, activation,
                     self_posembed=self.decoder_self_posembeds[i],
                     cross_posembed=self.decoder_cross_posembeds[i],
                 ))
@@ -121,10 +121,10 @@ class GroupFreeDetector(nn.Module):
         self.prediction_heads = nn.ModuleList()
         for i in range(self.num_decoder_layers):
             if self.size_cls_agnostic:
-                self.prediction_heads.append(ClsAgnosticPredictHead(num_class, num_heading_bin, num_proposal, 288))
+                self.prediction_heads.append(ClsAgnosticPredictHead(num_class, num_heading_bin, num_proposal, num_features))
             else:
                 self.prediction_heads.append(PredictHead(num_class, num_heading_bin, num_size_cluster,
-                                                         mean_size_arr, num_proposal, 288))
+                                                         mean_size_arr, num_proposal, num_features))
 
         # Init
         self.init_weights()
