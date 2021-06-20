@@ -462,7 +462,7 @@ if __name__ == "__main__":
     parser.add_argument('--ref_loss_coef', default=0.1, type=float, help='loss weight for ref loss')
     parser.add_argument('--lang_loss_coef', default=0.1, type=float, help='loss weight for lang loss')
     parser.add_argument('--query_points_generator_loss_coef', default=0.8, type=float)
-    parser.add_argument('--obj_loss_coef', default=0.1, type=float, help='loss weight for objectness loss')
+    parser.add_argument('--obj_loss_coef', default=0.2, type=float, help='loss weight for objectness loss')
     parser.add_argument('--box_loss_coef', default=1, type=float, help='loss weight for box loss')
     parser.add_argument('--sem_cls_loss_coef', default=0.1, type=float, help='loss weight for classification loss')
 
