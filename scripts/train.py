@@ -152,16 +152,19 @@ def get_model(args):
 
     # load pretrained backbone
     if args.use_pretrained_backbone:
-        # pretrained backbone has output size of 256
-        assert args.num_features == 256
-
         print("loading pretrained Pointnet2Backbone...")
 
-        pretrained_backbone = Pointnet2Backbone(input_channels, 256)
+        pretrained_backbone = Pointnet2Backbone(input_channels, args.num_features)
         backbone_state_dict = torch.load(args.use_pretrained_backbone, map_location='cpu')
         
-        new_state_dict = OrderedDict((k[13:], v) for k, v in backbone_state_dict.items() if k[:4] == 'back')
-        pretrained_backbone.load_state_dict(new_state_dict)
+        try:
+            # load state dict from pre-trained vanilla scanrefer
+            new_state_dict = OrderedDict((k[13:], v) for k, v in backbone_state_dict.items() if k[:4] == 'back')
+            pretrained_backbone.load_state_dict(new_state_dict)
+        except:
+            # load state dict from pre-trained transformer-based detector
+            new_state_dict = OrderedDict((k[20:], v) for k, v in backbone_state_dict['model'].items() if k[:11] == 'module.back')
+            pretrained_backbone.load_state_dict(new_state_dict)
 
         del backbone_state_dict
         torch.cuda.empty_cache()
