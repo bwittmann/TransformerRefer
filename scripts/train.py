@@ -330,7 +330,7 @@ def get_scannet_scene_list(split):
     return scene_list
 
 
-def get_scanrefer(scanrefer_train, scanrefer_val, num_scenes):
+def get_scanrefer(scanrefer_train, scanrefer_val, args):
     if args.no_reference:
         train_scene_list = get_scannet_scene_list("train")
         new_scanrefer_train = []
@@ -349,6 +349,7 @@ def get_scanrefer(scanrefer_train, scanrefer_val, num_scenes):
         # get initial scene list
         train_scene_list = sorted(list(set([data["scene_id"] for data in scanrefer_train])))
         val_scene_list = sorted(list(set([data["scene_id"] for data in scanrefer_val])))
+        num_scenes = args.num_scenes
         if num_scenes == -1:
             num_scenes = len(train_scene_list)
         else:
@@ -376,7 +377,7 @@ def get_scanrefer(scanrefer_train, scanrefer_val, num_scenes):
 def train(args):
     # init training dataset
     print("preparing data...")
-    scanrefer_train, scanrefer_val, all_scene_list = get_scanrefer(SCANREFER_TRAIN, SCANREFER_VAL, args.num_scenes)
+    scanrefer_train, scanrefer_val, all_scene_list = get_scanrefer(SCANREFER_TRAIN, SCANREFER_VAL, args)
     scanrefer = {
         "train": scanrefer_train,
         "val": scanrefer_val

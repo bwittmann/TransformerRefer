@@ -206,7 +206,6 @@ def get_eval(data_dict, config, reference, use_lang_classifier=False, use_oracle
 
         # NOTE: get_3d_box() will return problematic bboxes -> difference: get_3d_box does rotation,
         # construct_bbox_corners does not.
-        # TODO: but why do we want the problematic ones for iou calculation, but store the others?
         pred_bbox = construct_bbox_corners(pred_obb[0:3], pred_obb[3:6])
         gt_bbox = construct_bbox_corners(gt_obb[0:3], gt_obb[3:6])
         pred_bboxes.append(pred_bbox)
