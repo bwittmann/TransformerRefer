@@ -86,7 +86,10 @@ def get_model(args):
 
     # from pretrained scanrefer model with transformer
     if args.use_pretrained or args.use_pretrained_ref:
-        print("loading pretrained ScanRefer with Group Free Transformer detection...")
+        if args.use_pretrained_ref:
+            print(f"loading pretrained ScanRefer model with GroupFreeTransformer from {args.use_pretrained_ref}...")
+        else:
+            print(f"loading pretrained ScanRefer model with GroupFreeTransformer, only detector, from {args.use_pretrained}...")
 
         pretrained_model = RefNetV2(
             num_class=DC.num_class,
@@ -306,7 +309,8 @@ def get_solver(args, dataloader):
         reference=not args.no_reference,
         use_lang_classifier=not args.no_lang_cls,
         num_decoder_layers=args.num_decoder_layers,
-        loss_args=loss_args
+        loss_args=loss_args,
+        validate_detection=args.validate_detection
     )
     num_params = get_num_params(model)
 
@@ -422,6 +426,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_bidir", action="store_true", help="use bi-directional GRU")
     parser.add_argument("--emb_size", type=int, default=300, help="input size to GRU")
     parser.add_argument("--no_validation", action="store_true", help="do NOT validate; only for development debugging")
+    parser.add_argument("--validate_detection", action="store_true", help="for validation also calculate the detection mAPs")
 
 
     # input feature arguments

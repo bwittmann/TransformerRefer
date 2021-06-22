@@ -101,7 +101,8 @@ BEST_REPORT_TEMPLATE = """
 
 class Solver():
     def __init__(self, model, config, dataloader, optimizer, lr_scheduler, bn_scheduler, clip_norm, stamp, val_step=10,
-                 detection=True, reference=True, use_lang_classifier=True, loss_args=None, no_validation=True, num_decoder_layers=6):
+                 detection=True, reference=True, use_lang_classifier=True, loss_args=None, no_validation=True,
+                 num_decoder_layers=6, validate_detection=None):
         self.epoch = 0                    # set in __call__
         self.verbose = 0                  # set in __call__
         
@@ -114,6 +115,7 @@ class Solver():
         self.clip_norm = clip_norm
         self.stamp = stamp
         self.no_validation = no_validation
+        self.validate_detection = validate_detection
         self.val_step = val_step
         self.num_decoder_layers = num_decoder_layers
 
@@ -346,7 +348,7 @@ class Solver():
         self._reset_log(phase)
 
         # detection validation
-        if phase == "val":
+        if phase == "val" and ((not self.reference) or self.validate_detection):
             # Used for AP calculation
             CONFIG_DICT = {'remove_empty_box': True, 'use_3d_nms': True, 'nms_iou': 0.25, 'use_old_type_nms': False,
                            'cls_nms': True, 'per_class_proposal': True, 'conf_thresh': 0.0,
@@ -450,8 +452,8 @@ class Solver():
                 self._dump_log("train")
                 self._global_iter_id += 1
 
-            # for validation of only detection training, we want to get the mAP values
-            if phase == "val":
+            # for validation of detection we want to get the mAP values, need to save the predictions and gts
+            if phase == "val" and ((not self.reference) or self.validate_detection):
                 batch_pred_map_cls = parse_predictions(data_dict, CONFIG_DICT)
                 batch_gt_map_cls = parse_groundtruths(data_dict, CONFIG_DICT)
                 batch_pred_map_cls_dict.append(batch_pred_map_cls)
@@ -496,21 +498,22 @@ class Solver():
                 torch.save(self.model.state_dict(), os.path.join(model_root, "model.pth"))
 
             # detection validation
-            mAPs = self.detection_validation(batch_pred_map_cls_dict, batch_gt_map_cls_dict)
+            if (not self.reference) or self.validate_detection:
+                mAPs = self.detection_validation(batch_pred_map_cls_dict, batch_gt_map_cls_dict)
 
-            # if only training the detector, save current best model
-            if not self.reference:
-                # [last iou value][map score]
-                current_best = mAPs[-1][1]
-                if current_best > self.best_mAP:
-                    self._log("best mAP IoU @ {} achieved: {best:.5}".format(mAPs[-1][0], best=current_best))
-                    self._log("current train_loss: {}".format(np.mean(self.log["train"]["loss"])))
-                    self._log("current val_loss: {}".format(np.mean(self.log["val"]["loss"])))
-                    self.best_mAP = current_best
-                    # save model
-                    self._log("saving best models...\n")
-                    model_root = os.path.join(CONF.PATH.OUTPUT, self.stamp)
-                    torch.save(self.model.state_dict(), os.path.join(model_root, "model.pth"))
+                # if only training the detector, save current best model
+                if not self.reference:
+                    # [last iou value][map score]
+                    current_best = mAPs[-1][1]
+                    if current_best > self.best_mAP:
+                        self._log("best mAP IoU @ {} achieved: {best:.5}".format(mAPs[-1][0], best=current_best))
+                        self._log("current train_loss: {}".format(np.mean(self.log["train"]["loss"])))
+                        self._log("current val_loss: {}".format(np.mean(self.log["val"]["loss"])))
+                        self.best_mAP = current_best
+                        # save model
+                        self._log("saving best models...\n")
+                        model_root = os.path.join(CONF.PATH.OUTPUT, self.stamp)
+                        torch.save(self.model.state_dict(), os.path.join(model_root, "model.pth"))
 
     def detection_validation(self, batch_pred_map_cls_dict, batch_gt_map_cls_dict):
         AP_IOU_THRESHOLDS = [0.25, 0.5]
