@@ -444,12 +444,12 @@ if __name__ == "__main__":
     parser.add_argument("--freeze_transformer_layers", type=str, default="none",  help="do NOT train parts of the trans. detection module",
                         choices=["none", "all", "up_to_pred_heads", "up_to_decoder_fc", "only_backbone"])     
 
-    parser.add_argument("--wd", type=float, help="weight decay", default=1e-5)
+    parser.add_argument("--wd", type=float, help="weight decay", default=0.0005)
     parser.add_argument('--wd_detector', type=float, default=0.0005, help="L2 weight decay of the detector")
 
     parser.add_argument("--lr", type=float, help="learning rate of localization part", default=1e-3)
-    parser.add_argument('--lr_detector', type=float, default=0.004, help='initial detector learning rate for all except decoder')
-    parser.add_argument('--lr_detector_decoder', type=float, default=0.0004, help='initial learning rate for decoder')
+    parser.add_argument('--lr_detector', type=float, default=0.006, help='initial detector learning rate for all except decoder')
+    parser.add_argument('--lr_detector_decoder', type=float, default=0.0006, help='initial learning rate for decoder')
 
     parser.add_argument('--lr_scheduler', type=str, default='step', choices=["step", "cosine", "plateau"], help="learning rate scheduler")
 
@@ -476,8 +476,8 @@ if __name__ == "__main__":
     parser.add_argument('--box_loss_coef', default=1, type=float, help='loss weight for box loss')
     parser.add_argument('--sem_cls_loss_coef', default=0.1, type=float, help='loss weight for classification loss')
 
-    parser.add_argument('--center_delta', default=1.0, type=float, help='delta for smoothl1 loss in center loss')
-    parser.add_argument('--size_delta', default=1.0, type=float, help='delta for smoothl1 loss in size loss')
+    parser.add_argument('--center_delta', default=0.04, type=float, help='delta for smoothl1 loss in center loss')
+    parser.add_argument('--size_delta', default=0.111111111111, type=float, help='delta for smoothl1 loss in size loss')
     parser.add_argument('--heading_delta', default=1.0, type=float, help='delta for smoothl1 loss in heading loss')
 
 

@@ -346,7 +346,7 @@ class Solver():
         self._reset_log(phase)
 
         # detection validation
-        if phase == "val" and not self.reference:
+        if phase == "val":
             # Used for AP calculation
             CONFIG_DICT = {'remove_empty_box': True, 'use_3d_nms': True, 'nms_iou': 0.25, 'use_old_type_nms': False,
                            'cls_nms': True, 'per_class_proposal': True, 'conf_thresh': 0.0,
@@ -451,7 +451,7 @@ class Solver():
                 self._global_iter_id += 1
 
             # for validation of only detection training, we want to get the mAP values
-            if phase == "val" and not self.reference:
+            if phase == "val":
                 batch_pred_map_cls = parse_predictions(data_dict, CONFIG_DICT)
                 batch_gt_map_cls = parse_groundtruths(data_dict, CONFIG_DICT)
                 batch_pred_map_cls_dict.append(batch_pred_map_cls)
@@ -494,8 +494,12 @@ class Solver():
                 self._log("saving best models...\n")
                 model_root = os.path.join(CONF.PATH.OUTPUT, self.stamp)
                 torch.save(self.model.state_dict(), os.path.join(model_root, "model.pth"))
+
+            # detection validation
+            mAPs = self.detection_validation(batch_pred_map_cls_dict, batch_gt_map_cls_dict)
+
+            # if only training the detector, save current best model
             if not self.reference:
-                mAPs = self.detection_validation(batch_pred_map_cls_dict, batch_gt_map_cls_dict)
                 # [last iou value][map score]
                 current_best = mAPs[-1][1]
                 if current_best > self.best_mAP:
