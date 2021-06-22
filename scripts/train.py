@@ -85,7 +85,7 @@ def get_model(args):
     )
 
     # from pretrained scanrefer model with transformer
-    if args.use_pretrained:
+    if args.use_pretrained or args.use_pretrained_ref:
         print("loading pretrained ScanRefer with Group Free Transformer detection...")
 
         pretrained_model = RefNetV2(
@@ -102,11 +102,16 @@ def get_model(args):
             use_multi_ref_gt=args.use_multi_ref_gt
         )
 
-        pretrained_path = os.path.join(CONF.PATH.OUTPUT, args.use_pretrained, "model_last.pth")
+        path_name = args.use_pretrained if args.use_pretrained else args.use_pretrained_ref
+
+        pretrained_path = os.path.join(CONF.PATH.OUTPUT, path_name, "model_last.pth")
         pretrained_model.load_state_dict(torch.load(pretrained_path), strict=False)
 
         # mount
         model.detector = pretrained_model.detector
+        if args.use_pretrained_ref:
+            model.lang = pretrained_model.lang
+            model.match = pretrained_model.match
 
     # pretrained transformer directly from GroupFreeDetector weights
     if args.use_pretrained_transformer:
@@ -430,7 +435,8 @@ if __name__ == "__main__":
     parser.add_argument("--no_reference", action="store_true", help="do NOT train the localization module")
     parser.add_argument("--no_detection", action="store_true", help="do NOT train the detection module")
 
-    parser.add_argument("--use_pretrained", type=str, help="specify the folder name in outputs containing the pretrained model")
+    parser.add_argument("--use_pretrained", type=str, help="specify the folder name in outputs containing the pretrained model, detector used")
+    parser.add_argument("--use_pretrained_ref", type=str, help="specify the folder name in outputs containing the pretrained model, entire model used")
     parser.add_argument("--use_pretrained_transformer", type=str, help="specify the absolute file path for pretrained GroupFreeDetector module")    #TODO rename
     parser.add_argument("--use_pretrained_backbone", type=str, help="specify the absolute file path for pretrained pointnet++ backbone")
     parser.add_argument("--use_checkpoint", type=str, help="specify the checkpoint root", default="")
