@@ -85,8 +85,11 @@ def get_model(args):
     )
 
     # from pretrained scanrefer model with transformer
-    if args.use_pretrained:
-        print("loading pretrained ScanRefer with Group Free Transformer detection...")
+    if args.use_pretrained or args.use_pretrained_ref:
+        if args.use_pretrained_ref:
+            print(f"loading pretrained ScanRefer model with GroupFreeTransformer from {args.use_pretrained_ref}...")
+        else:
+            print(f"loading pretrained ScanRefer model with GroupFreeTransformer, only detector, from {args.use_pretrained}...")
 
         pretrained_model = RefNetV2(
             num_class=DC.num_class,
@@ -102,11 +105,16 @@ def get_model(args):
             use_multi_ref_gt=args.use_multi_ref_gt
         )
 
-        pretrained_path = os.path.join(CONF.PATH.OUTPUT, args.use_pretrained, "model_last.pth")
+        path_name = args.use_pretrained if args.use_pretrained else args.use_pretrained_ref
+
+        pretrained_path = os.path.join(CONF.PATH.OUTPUT, path_name, "model_last.pth")
         pretrained_model.load_state_dict(torch.load(pretrained_path), strict=False)
 
         # mount
         model.detector = pretrained_model.detector
+        if args.use_pretrained_ref:
+            model.lang = pretrained_model.lang
+            model.match = pretrained_model.match
 
     # pretrained transformer directly from GroupFreeDetector weights
     if args.use_pretrained_transformer:
@@ -301,7 +309,8 @@ def get_solver(args, dataloader):
         reference=not args.no_reference,
         use_lang_classifier=not args.no_lang_cls,
         num_decoder_layers=args.num_decoder_layers,
-        loss_args=loss_args
+        loss_args=loss_args,
+        validate_detection=args.validate_detection
     )
     num_params = get_num_params(model)
 
@@ -330,7 +339,7 @@ def get_scannet_scene_list(split):
     return scene_list
 
 
-def get_scanrefer(scanrefer_train, scanrefer_val, num_scenes):
+def get_scanrefer(scanrefer_train, scanrefer_val, args):
     if args.no_reference:
         train_scene_list = get_scannet_scene_list("train")
         new_scanrefer_train = []
@@ -349,6 +358,7 @@ def get_scanrefer(scanrefer_train, scanrefer_val, num_scenes):
         # get initial scene list
         train_scene_list = sorted(list(set([data["scene_id"] for data in scanrefer_train])))
         val_scene_list = sorted(list(set([data["scene_id"] for data in scanrefer_val])))
+        num_scenes = args.num_scenes
         if num_scenes == -1:
             num_scenes = len(train_scene_list)
         else:
@@ -376,7 +386,7 @@ def get_scanrefer(scanrefer_train, scanrefer_val, num_scenes):
 def train(args):
     # init training dataset
     print("preparing data...")
-    scanrefer_train, scanrefer_val, all_scene_list = get_scanrefer(SCANREFER_TRAIN, SCANREFER_VAL, args.num_scenes)
+    scanrefer_train, scanrefer_val, all_scene_list = get_scanrefer(SCANREFER_TRAIN, SCANREFER_VAL, args)
     scanrefer = {
         "train": scanrefer_train,
         "val": scanrefer_val
@@ -416,6 +426,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_bidir", action="store_true", help="use bi-directional GRU")
     parser.add_argument("--emb_size", type=int, default=300, help="input size to GRU")
     parser.add_argument("--no_validation", action="store_true", help="do NOT validate; only for development debugging")
+    parser.add_argument("--validate_detection", action="store_true", help="for validation also calculate the detection mAPs")
 
 
     # input feature arguments
@@ -429,7 +440,8 @@ if __name__ == "__main__":
     parser.add_argument("--no_reference", action="store_true", help="do NOT train the localization module")
     parser.add_argument("--no_detection", action="store_true", help="do NOT train the detection module")
 
-    parser.add_argument("--use_pretrained", type=str, help="specify the folder name in outputs containing the pretrained model")
+    parser.add_argument("--use_pretrained", type=str, help="specify the folder name in outputs containing the pretrained model, detector used")
+    parser.add_argument("--use_pretrained_ref", type=str, help="specify the folder name in outputs containing the pretrained model, entire model used")
     parser.add_argument("--use_pretrained_transformer", type=str, help="specify the absolute file path for pretrained GroupFreeDetector module")    #TODO rename
     parser.add_argument("--use_pretrained_backbone", type=str, help="specify the absolute file path for pretrained pointnet++ backbone")
     parser.add_argument("--use_checkpoint", type=str, help="specify the checkpoint root", default="")
@@ -437,12 +449,12 @@ if __name__ == "__main__":
     parser.add_argument("--freeze_transformer_layers", type=str, default="none",  help="do NOT train parts of the trans. detection module",
                         choices=["none", "all", "up_to_pred_heads", "up_to_decoder_fc", "only_backbone"])     
 
-    parser.add_argument("--wd", type=float, help="weight decay", default=1e-5)
+    parser.add_argument("--wd", type=float, help="weight decay", default=0.0005)
     parser.add_argument('--wd_detector', type=float, default=0.0005, help="L2 weight decay of the detector")
 
     parser.add_argument("--lr", type=float, help="learning rate of localization part", default=1e-3)
-    parser.add_argument('--lr_detector', type=float, default=0.004, help='initial detector learning rate for all except decoder')
-    parser.add_argument('--lr_detector_decoder', type=float, default=0.0004, help='initial learning rate for decoder')
+    parser.add_argument('--lr_detector', type=float, default=0.006, help='initial detector learning rate for all except decoder')
+    parser.add_argument('--lr_detector_decoder', type=float, default=0.0006, help='initial learning rate for decoder')
 
     parser.add_argument('--lr_scheduler', type=str, default='step', choices=["step", "cosine", "plateau"], help="learning rate scheduler")
 
@@ -469,8 +481,8 @@ if __name__ == "__main__":
     parser.add_argument('--box_loss_coef', default=1, type=float, help='loss weight for box loss')
     parser.add_argument('--sem_cls_loss_coef', default=0.1, type=float, help='loss weight for classification loss')
 
-    parser.add_argument('--center_delta', default=1.0, type=float, help='delta for smoothl1 loss in center loss')
-    parser.add_argument('--size_delta', default=1.0, type=float, help='delta for smoothl1 loss in size loss')
+    parser.add_argument('--center_delta', default=0.04, type=float, help='delta for smoothl1 loss in center loss')
+    parser.add_argument('--size_delta', default=0.111111111111, type=float, help='delta for smoothl1 loss in size loss')
     parser.add_argument('--heading_delta', default=1.0, type=float, help='delta for smoothl1 loss in heading loss')
 
 

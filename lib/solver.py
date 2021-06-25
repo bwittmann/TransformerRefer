@@ -16,6 +16,7 @@ from lib.config import CONF
 from lib.loss_helper_detector import get_loss_detector
 from lib.eval_helper import get_eval
 from utils.eta import decode_eta
+from lib.ap_helper import APCalculator, parse_predictions, parse_groundtruths
 
 
 ITER_REPORT_TEMPLATE = """
@@ -100,7 +101,8 @@ BEST_REPORT_TEMPLATE = """
 
 class Solver():
     def __init__(self, model, config, dataloader, optimizer, lr_scheduler, bn_scheduler, clip_norm, stamp, val_step=10,
-                 detection=True, reference=True, use_lang_classifier=True, loss_args=None, no_validation=True, num_decoder_layers=6):
+                 detection=True, reference=True, use_lang_classifier=True, loss_args=None, no_validation=True,
+                 num_decoder_layers=6, validate_detection=None):
         self.epoch = 0                    # set in __call__
         self.verbose = 0                  # set in __call__
         
@@ -113,6 +115,7 @@ class Solver():
         self.clip_norm = clip_norm
         self.stamp = stamp
         self.no_validation = no_validation
+        self.validate_detection = validate_detection
         self.val_step = val_step
         self.num_decoder_layers = num_decoder_layers
 
@@ -142,6 +145,8 @@ class Solver():
             "iou_rate_0.25": -float("inf"),
             "iou_rate_0.5": -float("inf")
         }
+        # for only detection training
+        self.best_mAP = -float("inf")
 
         # init log
         # contains all necessary info for all phases
@@ -342,6 +347,15 @@ class Solver():
         # re-init log
         self._reset_log(phase)
 
+        # detection validation
+        if phase == "val" and ((not self.reference) or self.validate_detection):
+            # Used for AP calculation
+            CONFIG_DICT = {'remove_empty_box': True, 'use_3d_nms': True, 'nms_iou': 0.25, 'use_old_type_nms': False,
+                           'cls_nms': True, 'per_class_proposal': True, 'conf_thresh': 0.0,
+                           'dataset_config': self.config}
+            batch_pred_map_cls_dict = []
+            batch_gt_map_cls_dict = []
+
         # change dataloader
         dataloader = dataloader if phase == "train" else tqdm(dataloader)
 
@@ -438,6 +452,13 @@ class Solver():
                 self._dump_log("train")
                 self._global_iter_id += 1
 
+            # for validation of detection we want to get the mAP values, need to save the predictions and gts
+            if phase == "val" and ((not self.reference) or self.validate_detection):
+                batch_pred_map_cls = parse_predictions(data_dict, CONFIG_DICT)
+                batch_gt_map_cls = parse_groundtruths(data_dict, CONFIG_DICT)
+                batch_pred_map_cls_dict.append(batch_pred_map_cls)
+                batch_gt_map_cls_dict.append(batch_gt_map_cls)
+
         # check best
         if phase == "val":
             # make a step if ReduceLROnPlateau lr scheduler is in use
@@ -446,7 +467,7 @@ class Solver():
 
             cur_criterion = "iou_rate_0.5"
             cur_best = np.mean(self.log[phase][cur_criterion])
-            if cur_best > self.best[cur_criterion]:
+            if (cur_best > self.best[cur_criterion]) and self.reference:
                 self._log("best {} achieved: {}".format(cur_criterion, cur_best))
                 self._log("current train_loss: {}".format(np.mean(self.log["train"]["loss"])))
                 self._log("current val_loss: {}".format(np.mean(self.log["val"]["loss"])))
@@ -475,6 +496,46 @@ class Solver():
                 self._log("saving best models...\n")
                 model_root = os.path.join(CONF.PATH.OUTPUT, self.stamp)
                 torch.save(self.model.state_dict(), os.path.join(model_root, "model.pth"))
+
+            # detection validation
+            if (not self.reference) or self.validate_detection:
+                mAPs = self.detection_validation(batch_pred_map_cls_dict, batch_gt_map_cls_dict)
+
+                # if only training the detector, save current best model
+                if not self.reference:
+                    # [last iou value][map score]
+                    current_best = mAPs[-1][1]
+                    if current_best > self.best_mAP:
+                        self._log("best mAP IoU @ {} achieved: {best:.5}".format(mAPs[-1][0], best=current_best))
+                        self._log("current train_loss: {}".format(np.mean(self.log["train"]["loss"])))
+                        self._log("current val_loss: {}".format(np.mean(self.log["val"]["loss"])))
+                        self.best_mAP = current_best
+                        # save model
+                        self._log("saving best models...\n")
+                        model_root = os.path.join(CONF.PATH.OUTPUT, self.stamp)
+                        torch.save(self.model.state_dict(), os.path.join(model_root, "model.pth"))
+
+    def detection_validation(self, batch_pred_map_cls_dict, batch_gt_map_cls_dict):
+        AP_IOU_THRESHOLDS = [0.25, 0.5]
+        ap_calculator_list = [APCalculator(iou_thresh, self.config.class2type) for iou_thresh in AP_IOU_THRESHOLDS]
+        mAPs = [[iou_thresh, 0] for iou_thresh in AP_IOU_THRESHOLDS]
+        for (batch_pred_map_cls, batch_gt_map_cls) in zip(batch_pred_map_cls_dict, batch_gt_map_cls_dict):
+            for ap_calculator in ap_calculator_list:
+                ap_calculator.step(batch_pred_map_cls, batch_gt_map_cls)
+        # Evaluate average precision
+        for i, ap_calculator in enumerate(ap_calculator_list):
+            metrics_dict = ap_calculator.compute_metrics()
+            for key, value in metrics_dict.items():
+                if key in ["mAP", "AR"]:
+                    if key == "mAP":
+                        mAPs[i][1] = value
+                    self._log_writer["val"].add_scalar("detection_iou_{iou}/{key}".format(iou=AP_IOU_THRESHOLDS[i], key=key), value, self._global_iter_id)
+                else:
+                    self._log_writer["val"].add_scalar("detection_iou_{iou}_per_class/{key}".format(iou=AP_IOU_THRESHOLDS[i], key=key), value, self._global_iter_id)
+            ap_calculator.reset()
+        for mAP in mAPs:
+            self._log("Detection Validation: IoU @ {iou}, mAP = {value:.5}".format(iou=mAP[0], value=mAP[1]))
+        return mAPs
 
     def _dump_log(self, phase):
         log = {
