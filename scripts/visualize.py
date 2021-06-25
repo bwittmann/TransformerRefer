@@ -256,10 +256,16 @@ def write_bbox(bbox, mode, output_file):
 
     box_min = np.min(corners, axis=0)
     box_max = np.max(corners, axis=0)
-    palette = {
-        0: [0, 255, 0], # gt
-        1: [0, 0, 255]  # pred
-    }
+    if args.color_bbox_pred == 'blue':
+        palette = {
+            0: [0, 255, 0], # gt
+            1: [0, 0, 255]  # pred
+        }
+    elif args.color_bbox_pred == 'red':
+        palette = {
+            0: [0, 255, 0], # gt
+            1: [255, 0, 0]  # pred
+        }
     chosen_color = palette[mode]
     edges = get_bbox_edges(box_min, box_max)
     for k in range(len(edges)):
@@ -524,6 +530,8 @@ if __name__ == "__main__":
     parser.add_argument('--use_color', action='store_true', help='Use RGB color in input.')
     parser.add_argument('--use_normal', action='store_true', help='Use RGB color in input.')
     parser.add_argument('--use_multiview', action='store_true', help='Use multiview images.')
+    parser.add_argument('--color_bbox_pred', type=str, default='red', help='Color of the bounding box of the predicted objects.')
+
     
     parser.add_argument("--use_bidir", action="store_true", help="use bi-directional GRU")
     parser.add_argument("--no_lang_cls", action="store_true", help="do NOT use language classifier")
