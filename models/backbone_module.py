@@ -17,17 +17,18 @@ class Pointnet2Backbone(nn.Module):
             Number of input channels in the feature descriptor for each point.
             e.g. 3 for RGB.
     """
-    def __init__(self, input_feature_dim=0, output_feature_dim=288):
+    def __init__(self, input_feature_dim=0, width=1, output_feature_dim=288, depth=2):
         super().__init__()
-
         self.input_feature_dim = input_feature_dim
+        self.width = width
+        self.depth = depth
 
         # --------- 4 SET ABSTRACTION LAYERS ---------
         self.sa1 = PointnetSAModuleVotes(
                 npoint=2048,
                 radius=0.2,
                 nsample=64,
-                mlp=[input_feature_dim, 64, 64, 128],
+                mlp=[input_feature_dim] + [64 * width for i in range(depth)] + [128 * width],
                 use_xyz=True,
                 normalize_xyz=True
             )
@@ -36,7 +37,7 @@ class Pointnet2Backbone(nn.Module):
                 npoint=1024,
                 radius=0.4,
                 nsample=32,
-                mlp=[128, 128, 128, 256],
+                mlp=[128 * width] + [128 * width for i in range(depth)] + [256 * width],
                 use_xyz=True,
                 normalize_xyz=True
             )
@@ -45,7 +46,7 @@ class Pointnet2Backbone(nn.Module):
                 npoint=512,
                 radius=0.8,
                 nsample=16,
-                mlp=[256, 128, 128, 256],
+                mlp=[256 * width] + [128 * width for i in range(depth)] + [256 * width],
                 use_xyz=True,
                 normalize_xyz=True
             )
@@ -54,14 +55,14 @@ class Pointnet2Backbone(nn.Module):
                 npoint=256,
                 radius=1.2,
                 nsample=16,
-                mlp=[256, 128, 128, 256],
+                mlp=[256 * width] + [128 * width for i in range(depth)] + [256 * width],
                 use_xyz=True,
                 normalize_xyz=True
             )
 
         # --------- 2 FEATURE UPSAMPLING LAYERS --------
-        self.fp1 = PointnetFPModule(mlp=[256+256,256,256])
-        self.fp2 = PointnetFPModule(mlp=[256+256,256,output_feature_dim])
+        self.fp1 = PointnetFPModule(mlp=[256 * width + 256 * width, 256 * width, 256 * width])
+        self.fp2 = PointnetFPModule(mlp=[256 * width + 256 * width, 256 * width, output_feature_dim])
 
 
     def _break_up_pc(self, pc):
