@@ -31,7 +31,6 @@ outputs/*
 !outputs/ScanRefer
 eval_dump
 demo
-docs
 LICENSE
 *pyc
 .vscode
