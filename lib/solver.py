@@ -506,7 +506,7 @@ class Solver():
                     # [last iou value][map score]
                     current_best = mAPs[-1][1]
                     if current_best > self.best_mAP:
-                        self._log("best mAP IoU @ {} achieved: {best:.5}".format(mAPs[-1][0], best=current_best))
+                        self._log("best mAP @ IoU 0.5 achieved: {best:.5}".format(best=current_best))
                         self._log("current train_loss: {}".format(np.mean(self.log["train"]["loss"])))
                         self._log("current val_loss: {}".format(np.mean(self.log["val"]["loss"])))
                         self.best_mAP = current_best
@@ -699,6 +699,8 @@ class Solver():
             iou_rate_25=round(self.best["iou_rate_0.25"], 5),
             iou_rate_5=round(self.best["iou_rate_0.5"], 5),
         )
+        if not self.reference:
+            best_report = "best mAP @ IoU 0.5 achieved: {best:.5}".format(best=self.best_mAP)
         self._log(best_report)
         with open(os.path.join(CONF.PATH.OUTPUT, self.stamp, "best.txt"), "w") as f:
             f.write(best_report)
