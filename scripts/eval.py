@@ -14,7 +14,7 @@ sys.path.append(os.path.join(os.getcwd())) # HACK add the root folder
 from lib.config import CONF
 from lib.dataset import ScannetReferenceDataset
 from lib.ap_helper import APCalculator, parse_predictions, parse_groundtruths
-from lib.loss_helper_detector import get_loss_detector
+from lib.loss_helper import get_loss_detector
 from lib.eval_helper import get_eval
 from models.refnetV2 import RefNetV2
 from data.scannet.model_util_scannet import ScannetDatasetConfig

@@ -15,7 +15,7 @@ from utils.box_util import get_3d_box, box3d_iou
 from models.refnetV2 import RefNetV2
 from data.scannet.model_util_scannet import ScannetDatasetConfig
 from lib.dataset import ScannetReferenceDataset
-from lib.loss_helper_detector import get_loss_detector
+from lib.loss_helper import get_loss_detector
 from lib.eval_helper import get_eval
 from lib.config import CONF
 
