@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class SoftmaxRankingLoss(nn.Module):
     def __init__(self):
         super().__init__()
@@ -15,7 +16,6 @@ class SoftmaxRankingLoss(nn.Module):
 
         # reduction
         loss = -torch.sum(torch.log(probs + 1e-8) * targets, dim=1).mean()
-
         return loss
 
 
@@ -39,7 +39,6 @@ class SigmoidFocalClassificationLoss(nn.Module):
     """
     Sigmoid focal cross entropy loss.
     """
-
     def __init__(self, gamma: float = 2.0, alpha: float = 0.25):
         """
         Args:
@@ -66,8 +65,7 @@ class SigmoidFocalClassificationLoss(nn.Module):
             loss: (B, #proposals, #classes) float tensor.
                 Sigmoid cross entropy loss without reduction
         """
-        loss = torch.clamp(input, min=0) - input * target + \
-               torch.log1p(torch.exp(-torch.abs(input)))
+        loss = torch.clamp(input, min=0) - input * target + torch.log1p(torch.exp(-torch.abs(input)))
         return loss
 
     def forward(self, input: torch.Tensor, target: torch.Tensor, weights: torch.Tensor):

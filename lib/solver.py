@@ -2,7 +2,6 @@
 File Created: Monday, 25th November 2019 1:35:30 pm
 Author: Dave Zhenyu Chen (zhenyu.chen@tum.de)
 '''
-
 import os
 import sys
 import time
@@ -11,9 +10,9 @@ import numpy as np
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
 
-sys.path.append(os.path.join(os.getcwd(), "lib")) # HACK add the lib folder
+sys.path.append(os.path.join(os.getcwd(), "lib"))  # HACK add the lib folder
 from lib.config import CONF
-from lib.loss_helper import get_loss_detector
+from lib.loss_helper import get_loss
 from lib.eval_helper import get_eval
 from utils.eta import decode_eta
 from lib.ap_helper import APCalculator, parse_predictions, parse_groundtruths
@@ -100,9 +99,22 @@ BEST_REPORT_TEMPLATE = """
 
 
 class Solver():
-    def __init__(self, model, config, dataloader, optimizer, lr_scheduler, bn_scheduler, clip_norm, stamp, val_step=10,
-                 detection=True, reference=True, use_lang_classifier=True, loss_args=None, no_validation=True,
-                 num_decoder_layers=6, validate_detection=None):
+    def __init__(self,
+                 model,
+                 config,
+                 dataloader,
+                 optimizer,
+                 lr_scheduler, bn_scheduler,
+                 clip_norm,
+                 stamp,
+                 val_step=10,
+                 detection=True,
+                 reference=True,
+                 use_lang_classifier=True,
+                 loss_args=None,
+                 no_validation=True,
+                 num_decoder_layers=6,
+                 validate_detection=None):
         self.epoch = 0                    # set in __call__
         self.verbose = 0                  # set in __call__
         
@@ -145,8 +157,7 @@ class Solver():
             "iou_rate_0.25": -float("inf"),
             "iou_rate_0.5": -float("inf")
         }
-        # for only detection training
-        self.best_mAP = -float("inf")
+        self.best_mAP = -float("inf")  # for only detection training
 
         # init log
         # contains all necessary info for all phases
@@ -177,7 +188,6 @@ class Solver():
         self.__iter_report_template = ITER_REPORT_TEMPLATE
         self.__epoch_report_template = EPOCH_REPORT_TEMPLATE
         self.__best_report_template = BEST_REPORT_TEMPLATE
-
 
     def __call__(self, epoch, verbose):
         # setting
@@ -284,11 +294,11 @@ class Solver():
         self.optimizer.zero_grad()
         self._running_log["loss"].backward()
         if self.clip_norm > 0:
-            grad_total_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_norm)
+            _ = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_norm)
         self.optimizer.step()
 
     def _compute_loss(self, data_dict):
-        _, data_dict = get_loss_detector(
+        _, data_dict = get_loss(
             end_points=data_dict, 
             config=self.config,
             num_decoder_layers=self.num_decoder_layers,
@@ -350,9 +360,9 @@ class Solver():
         # detection validation
         if phase == "val" and ((not self.reference) or self.validate_detection):
             # Used for AP calculation
-            CONFIG_DICT = {'remove_empty_box': True, 'use_3d_nms': True, 'nms_iou': 0.25, 'use_old_type_nms': False,
-                           'cls_nms': True, 'per_class_proposal': True, 'conf_thresh': 0.0,
-                           'dataset_config': self.config}
+            CONFIG_DICT = {'remove_empty_box': True,
+                           'use_3d_nms': True, 'nms_iou': 0.25, 'use_old_type_nms': False, 'cls_nms': True,
+                           'per_class_proposal': True, 'conf_thresh': 0.0, 'dataset_config': self.config}
             batch_pred_map_cls_dict = []
             batch_gt_map_cls_dict = []
 
@@ -454,6 +464,7 @@ class Solver():
 
             # for validation of detection we want to get the mAP values, need to save the predictions and gts
             if phase == "val" and ((not self.reference) or self.validate_detection):
+                # TODO: keep track of which scenes we have already and only add new ones!
                 batch_pred_map_cls = parse_predictions(data_dict, CONFIG_DICT)
                 batch_gt_map_cls = parse_groundtruths(data_dict, CONFIG_DICT)
                 batch_pred_map_cls_dict.append(batch_pred_map_cls)
@@ -510,7 +521,8 @@ class Solver():
                         self._log("current train_loss: {}".format(np.mean(self.log["train"]["loss"])))
                         self._log("current val_loss: {}".format(np.mean(self.log["val"]["loss"])))
                         self.best_mAP = current_best
-                        # save model
+
+                        # save best model
                         self._log("saving best models...\n")
                         model_root = os.path.join(CONF.PATH.OUTPUT, self.stamp)
                         torch.save(self.model.state_dict(), os.path.join(model_root, "model.pth"))
@@ -545,9 +557,6 @@ class Solver():
         }
         for key in log:
             for item in log[key]:
-                # Instead of logging the average over the values of the epoch so far, we could log the stats of the last
-                # iteration. -> will be much noisier and spikier though especially with small batch sizes: just
-                # substitute all below with "log_value = self._running_log[item]"
                 values = np.array([v for v in self.log[phase][item]])
                 # remove nan
                 values = values[~np.isnan(values)]

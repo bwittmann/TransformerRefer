@@ -2,20 +2,18 @@ import os
 import sys
 import json
 import argparse
-
 import numpy as np
-
 from tqdm import tqdm
 
-sys.path.append(os.path.join(os.getcwd())) # HACK add the root folder
+sys.path.append(os.path.join(os.getcwd()))  # HACK add the root folder
 from lib.config import CONF
 from utils.box_util import box3d_iou
 
 SCANREFER_GT = json.load(open(os.path.join(CONF.PATH.DATA, "ScanRefer_filtered_test_gt_bbox.json")))
 
+
 def organize_gt():
     organized = {}
-
     for data in SCANREFER_GT:
         scene_id = data["scene_id"]
         object_id = data["object_id"]
@@ -31,8 +29,8 @@ def organize_gt():
             organized[scene_id][object_id][ann_id] = {}
 
         organized[scene_id][object_id][ann_id] = data
-
     return organized
+
 
 def evaluate(args):
     pred_path = os.path.join(CONF.PATH.OUTPUT, args.folder, "pred.json")
@@ -58,9 +56,7 @@ def evaluate(args):
 
             try:
                 gt_bbox = np.array(organized_gt[scene_id][object_id][ann_id]["bbox"])
-                # iou, _ = box3d_iou(pred_bbox, gt_bbox)
                 iou = box3d_iou(pred_bbox, gt_bbox)
-                
             except KeyError:
                 iou = 0
 
@@ -109,12 +105,8 @@ def evaluate(args):
         scores = {}
         for k, v in multiple_dict.items():
             for k_o in others_dict.keys():
-                acc_025iou = ious[np.logical_and(np.logical_and(masks == multiple_dict[k], others == others_dict[k_o]), ious >= 0.25)].shape[0] \
-                    / ious[np.logical_and(masks == multiple_dict[k], others == others_dict[k_o])].shape[0] \
-                    if np.sum(np.logical_and(masks == multiple_dict[k], others == others_dict[k_o])) > 0 else 0
-                acc_05iou = ious[np.logical_and(np.logical_and(masks == multiple_dict[k], others == others_dict[k_o]), ious >= 0.5)].shape[0] \
-                    / ious[np.logical_and(masks == multiple_dict[k], others == others_dict[k_o])].shape[0] \
-                    if np.sum(np.logical_and(masks == multiple_dict[k], others == others_dict[k_o])) > 0 else 0
+                acc_025iou = ious[np.logical_and(np.logical_and(masks == multiple_dict[k], others == others_dict[k_o]), ious >= 0.25)].shape[0] / ious[np.logical_and(masks == multiple_dict[k], others == others_dict[k_o])].shape[0] if np.sum(np.logical_and(masks == multiple_dict[k], others == others_dict[k_o])) > 0 else 0
+                acc_05iou = ious[np.logical_and(np.logical_and(masks == multiple_dict[k], others == others_dict[k_o]), ious >= 0.5)].shape[0] / ious[np.logical_and(masks == multiple_dict[k], others == others_dict[k_o])].shape[0] if np.sum(np.logical_and(masks == multiple_dict[k], others == others_dict[k_o])) > 0 else 0
 
                 if k not in scores:
                     scores[k] = {k_o: {} for k_o in others_dict.keys()}
@@ -122,10 +114,8 @@ def evaluate(args):
                 scores[k][k_o]["acc@0.25iou"] = acc_025iou
                 scores[k][k_o]["acc@0.5iou"] = acc_05iou
 
-            acc_025iou = ious[np.logical_and(masks == multiple_dict[k], ious >= 0.25)].shape[0] \
-                / ious[masks == multiple_dict[k]].shape[0] if np.sum(masks == multiple_dict[k]) > 0 else 0
-            acc_05iou = ious[np.logical_and(masks == multiple_dict[k], ious >= 0.5)].shape[0] \
-                / ious[masks == multiple_dict[k]].shape[0] if np.sum(masks == multiple_dict[k]) > 0 else 0
+            acc_025iou = ious[np.logical_and(masks == multiple_dict[k], ious >= 0.25)].shape[0] / ious[masks == multiple_dict[k]].shape[0] if np.sum(masks == multiple_dict[k]) > 0 else 0
+            acc_05iou = ious[np.logical_and(masks == multiple_dict[k], ious >= 0.5)].shape[0] / ious[masks == multiple_dict[k]].shape[0] if np.sum(masks == multiple_dict[k]) > 0 else 0
 
             scores[k]["overall"] = {}
             scores[k]["overall"]["acc@0.25iou"] = acc_025iou
@@ -133,10 +123,8 @@ def evaluate(args):
 
         scores["overall"] = {}
         for k_o in others_dict.keys():
-            acc_025iou = ious[np.logical_and(others == others_dict[k_o], ious >= 0.25)].shape[0] \
-                / ious[others == others_dict[k_o]].shape[0] if np.sum(others == others_dict[k_o]) > 0 else 0
-            acc_05iou = ious[np.logical_and(others == others_dict[k_o], ious >= 0.5)].shape[0] \
-                / ious[others == others_dict[k_o]].shape[0] if np.sum(others == others_dict[k_o]) > 0 else 0
+            acc_025iou = ious[np.logical_and(others == others_dict[k_o], ious >= 0.25)].shape[0] / ious[others == others_dict[k_o]].shape[0] if np.sum(others == others_dict[k_o]) > 0 else 0
+            acc_05iou = ious[np.logical_and(others == others_dict[k_o], ious >= 0.5)].shape[0] / ious[others == others_dict[k_o]].shape[0] if np.sum(others == others_dict[k_o]) > 0 else 0
 
             # aggregate
             scores["overall"][k_o] = {}
@@ -145,7 +133,6 @@ def evaluate(args):
         
         acc_025iou = ious[ious >= 0.25].shape[0] / ious.shape[0]
         acc_05iou = ious[ious >= 0.5].shape[0] / ious.shape[0]
-
 
         # aggregate
         scores["overall"]["overall"] = {}
@@ -163,6 +150,7 @@ def evaluate(args):
             for k_m in scores[k_s].keys():
                 for metric in scores[k_s][k_m].keys():
                     print("{} | {} | {}: {}".format(k_s, k_m, metric, scores[k_s][k_m][metric]))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

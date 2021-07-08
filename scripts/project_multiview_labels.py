@@ -14,7 +14,7 @@ from tqdm import tqdm
 from plyfile import PlyData, PlyElement
 from collections import Counter
 
-sys.path.append(os.path.join(os.getcwd())) # HACK add the root folder
+sys.path.append(os.path.join(os.getcwd()))  # HACK add the root folder
 from lib.config import CONF
 from lib.projection import ProjectionHelper
 from lib.enet import create_enet_for_3d
@@ -22,13 +22,13 @@ from lib.enet import create_enet_for_3d
 SCANNET_LIST = CONF.SCANNETV2_LIST
 SCANNET_DATA = CONF.PATH.SCANNET_DATA
 SCANNET_FRAME_ROOT = CONF.SCANNET_FRAMES
-SCANNET_FRAME_PATH = os.path.join(SCANNET_FRAME_ROOT, "{}") # name of the file
+SCANNET_FRAME_PATH = os.path.join(SCANNET_FRAME_ROOT, "{}")  # name of the file
 
 ENET_FEATURE_PATH = CONF.ENET_FEATURES_PATH
 ENET_FEATURE_DATABASE = CONF.MULTIVIEW
 
 # projection
-INTRINSICS = [[37.01983, 0, 20, 0],[0, 38.52470, 15.5, 0],[0, 0, 1, 0],[0, 0, 0, 1]]
+INTRINSICS = [[37.01983, 0, 20, 0], [0, 38.52470, 15.5, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
 PROJECTOR = ProjectionHelper(INTRINSICS, 0.1, 4.0, [41, 32], 0.05)
 
 ENET_PATH = CONF.ENET_WEIGHTS
@@ -40,17 +40,18 @@ SCANNET_LABELS = ['unannotated', 'wall', 'floor', 'chair', 'table', 'desk', 'bed
 PC_LABEL_ROOT = os.path.join(CONF.PATH.OUTPUT, "projections")
 PC_LABEL_PATH = os.path.join(PC_LABEL_ROOT, "{}.ply")
 
+
 def get_nyu40_labels():
     labels = ["unannotated"]
     labels += pd.read_csv(NYU40_LABELS)["nyu40class"].tolist()
-    
     return labels
+
 
 def get_prediction_to_raw():
     labels = get_nyu40_labels()
     mapping = {i: label for i, label in enumerate(labels)}
-
     return mapping
+
 
 def get_nyu_to_scannet():
     nyu_idx_to_nyu_label = get_prediction_to_raw()
@@ -67,6 +68,7 @@ def get_nyu_to_scannet():
         nyu_to_scannet[nyu_idx] = scannet_idx
 
     return nyu_to_scannet
+
 
 def create_color_palette():
     return {
@@ -93,6 +95,7 @@ def create_color_palette():
         "otherfurniture": (82, 84, 163),
     }
 
+
 def get_scene_list(args):
     if args.scene_id == "-1":
         with open(SCANNET_LIST, 'r') as f:
@@ -100,8 +103,10 @@ def get_scene_list(args):
     else:
         return [args.scene_id]
 
+
 def to_tensor(arr):
     return torch.Tensor(arr).cuda()
+
 
 def resize_crop_image(image, new_image_dims):
     image_dims = [image.shape[1], image.shape[0]]
@@ -111,38 +116,38 @@ def resize_crop_image(image, new_image_dims):
     image = transforms.Resize([new_image_dims[1], resize_width], interpolation=Image.NEAREST)(Image.fromarray(image))
     image = transforms.CenterCrop([new_image_dims[1], new_image_dims[0]])(image)
     image = np.array(image)
-    
     return image
+
 
 def load_image(file, image_dims):
     image = imread(file)
     # preprocess
     image = resize_crop_image(image, image_dims)
-    if len(image.shape) == 3: # color image
-        image =  np.transpose(image, [2, 0, 1])  # move feature to front
+    if len(image.shape) == 3:  # color image
+        image = np.transpose(image, [2, 0, 1])  # move feature to front
         image = transforms.Normalize(mean=[0.496342, 0.466664, 0.440796], std=[0.277856, 0.28623, 0.291129])(torch.Tensor(image.astype(np.float32) / 255.0))
-    elif len(image.shape) == 2: # label image
-#         image = np.expand_dims(image, 0)
+    elif len(image.shape) == 2:  # label image
+        # image = np.expand_dims(image, 0)
         pass
     else:
         raise
-        
     return image
+
 
 def load_pose(filename):
     lines = open(filename).read().splitlines()
     assert len(lines) == 4
-    lines = [[x[0],x[1],x[2],x[3]] for x in (x.split(" ") for x in lines)]
-
+    lines = [[x[0], x[1], x[2], x[3]] for x in (x.split(" ") for x in lines)]
     return np.asarray(lines).astype(np.float32)
+
 
 def load_depth(file, image_dims):
     depth_image = imread(file)
     # preprocess
     depth_image = resize_crop_image(depth_image, image_dims)
     depth_image = depth_image.astype(np.float32) / 1000.0
-
     return depth_image
+
 
 def visualize(coords, labels):
     palette = create_color_palette()
@@ -177,13 +182,14 @@ def visualize(coords, labels):
     os.makedirs(PC_LABEL_ROOT, exist_ok=True)
     output_pc.write(PC_LABEL_PATH.format(args.scene_id))
 
+
 def get_scene_data(scene_list):
     scene_data = {}
     for scene_id in scene_list:
         scene_data[scene_id] = {}
         scene_data[scene_id] = np.load(os.path.join(SCANNET_DATA, scene_id)+"_vert.npy")[:, :3]
-    
     return scene_data
+
 
 def compute_projection(points, depth, camera_to_world):
     """
@@ -211,6 +217,7 @@ def compute_projection(points, depth, camera_to_world):
         
     return indices_3ds, indices_2ds
 
+
 def create_enet():
     enet_fixed, enet_trainable, enet_classifier = create_enet_for_3d(41, ENET_PATH, 21)
     enet = nn.Sequential(
@@ -221,7 +228,6 @@ def create_enet():
     enet.eval()
     for param in enet.parameters():
         param.requires_grad = False
-
     return enet
 
 
@@ -238,6 +244,7 @@ if __name__ == "__main__":
     enet = create_enet()
     for scene_id in tqdm(scene_list):
         scene = scene_data[scene_id]
+
         # load frames
         frame_list = list(map(lambda x: x.split(".")[0], sorted(os.listdir(SCANNET_FRAME_ROOT.format(scene_id, "color")))))
         scene_images = np.zeros((len(frame_list), 3, 256, 328))
@@ -291,7 +298,7 @@ if __name__ == "__main__":
                 image = load_image(SCANNET_FRAME_PATH.format(scene_id, "color", "{}.jpg".format(frame_id)), [328, 256])
                 feat = enet(to_tensor(image).unsqueeze(0)).max(1)[1].unsqueeze(1)
 
-            proj_label = PROJECTOR.project(feat, projection_3d, projection_2d, scene.shape[0]).transpose(1, 0) # num_points, 1
+            proj_label = PROJECTOR.project(feat, projection_3d, projection_2d, scene.shape[0]).transpose(1, 0)  # num_points, 1
 
             if args.maxpool:
                 # only apply max pooling on the overlapping points
@@ -334,5 +341,3 @@ if __name__ == "__main__":
 
         # output
         visualize(scene, labels.long().squeeze(1).cpu().numpy())
-
-    

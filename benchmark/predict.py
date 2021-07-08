@@ -8,17 +8,19 @@ import numpy as np
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-sys.path.append(os.path.join(os.getcwd())) # HACK add the root folder
+sys.path.append(os.path.join(os.getcwd()))  # HACK add the root folder
 from lib.config import CONF
 from lib.dataset import ScannetReferenceDataset
 from lib.ap_helper import parse_predictions
 from models.refnetV2 import RefNetV2
+from lib.loss_helper import get_loss
 from utils.box_util import get_3d_box
 from data.scannet.model_util_scannet import ScannetDatasetConfig
 
 SCANREFER_TEST = json.load(open(os.path.join(CONF.PATH.DATA, "ScanRefer_filtered_test.json")))
 
-def get_dataloader(args, scanrefer, all_scene_list, split, config):
+
+def get_dataloader(args, scanrefer, all_scene_list, split):
     dataset = ScannetReferenceDataset(
         scanrefer=scanrefer, 
         scanrefer_all_scene=all_scene_list, 
@@ -34,6 +36,7 @@ def get_dataloader(args, scanrefer, all_scene_list, split, config):
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
 
     return dataset, dataloader
+
 
 def get_model(args, config):
     # load model
@@ -76,17 +79,18 @@ def get_model(args, config):
 
     return model
 
+
 def get_scannet_scene_list(split):
     scene_list = sorted([line.rstrip() for line in open(os.path.join(CONF.PATH.SCANNET_META, "scannetv2_{}.txt".format(split)))])
-
     return scene_list
+
 
 def get_scanrefer(args):
     scanrefer = SCANREFER_TEST
     scene_list = sorted(list(set([data["scene_id"] for data in scanrefer])))
     scanrefer = [data for data in scanrefer if data["scene_id"] in scene_list]
-
     return scanrefer, scene_list
+
 
 def predict(args):
     print("predict bounding boxes...")
@@ -98,7 +102,7 @@ def predict(args):
     scanrefer, scene_list = get_scanrefer(args)
 
     # dataloader
-    _, dataloader = get_dataloader(args, scanrefer, scene_list, "test", DC)
+    _, dataloader = get_dataloader(args, scanrefer, scene_list, "test")
 
     # model
     model = get_model(args, DC)
@@ -125,10 +129,14 @@ def predict(args):
         # feed
         data_dict = model(data_dict)
 
-        # TODO: implement transformer loss
+        # loss
         _, data_dict = get_loss(
-            data_dict=data_dict, 
-            config=DC, 
+            end_points=data_dict,
+            config=DC,
+            num_decoder_layers=args.num_decoder_layers,
+            size_cls_agnostic=args.size_cls_agnostic,
+            use_votenet_objectness=args.use_votenet_objectness,
+            use_multi_ref_gt=args.use_multi_ref_gt,
             detection=False,
             reference=True
         )
@@ -145,16 +153,16 @@ def predict(args):
             # construct valid mask
             pred_masks = (objectness_preds_batch == 1).float()
 
-        pred_ref = torch.argmax(data_dict['cluster_ref'] * pred_masks, 1) # (B,)
-        pred_center = data_dict['center'] # (B,K,3)
-        pred_heading_class = torch.argmax(data_dict['heading_scores'], -1) # B,num_proposal
-        pred_heading_residual = torch.gather(data_dict['heading_residuals'], 2, pred_heading_class.unsqueeze(-1)) # B,num_proposal,1
-        pred_heading_class = pred_heading_class # B,num_proposal
-        pred_heading_residual = pred_heading_residual.squeeze(2) # B,num_proposal
-        pred_size_class = torch.argmax(data_dict['size_scores'], -1) # B,num_proposal
-        pred_size_residual = torch.gather(data_dict['size_residuals'], 2, pred_size_class.unsqueeze(-1).unsqueeze(-1).repeat(1,1,1,3)) # B,num_proposal,1,3
+        pred_ref = torch.argmax(data_dict['cluster_ref'] * pred_masks, 1)  # (B,)
+        pred_center = data_dict['center']  # (B,K,3)
+        pred_heading_class = torch.argmax(data_dict['heading_scores'], -1)  # B,num_proposal
+        pred_heading_residual = torch.gather(data_dict['heading_residuals'], 2, pred_heading_class.unsqueeze(-1))  # B,num_proposal,1
+        pred_heading_class = pred_heading_class  # B,num_proposal
+        pred_heading_residual = pred_heading_residual.squeeze(2)  # B,num_proposal
+        pred_size_class = torch.argmax(data_dict['size_scores'], -1)  # B,num_proposal
+        pred_size_residual = torch.gather(data_dict['size_residuals'], 2, pred_size_class.unsqueeze(-1).unsqueeze(-1).repeat(1,1,1,3))  # B,num_proposal,1,3
         pred_size_class = pred_size_class
-        pred_size_residual = pred_size_residual.squeeze(2) # B,num_proposal,3
+        pred_size_residual = pred_size_residual.squeeze(2)  # B,num_proposal,3
 
         for i in range(pred_ref.shape[0]):
             # compute the iou
@@ -191,8 +199,8 @@ def predict(args):
     pred_path = os.path.join(CONF.PATH.OUTPUT, args.folder, "pred.json")
     with open(pred_path, "w") as f:
         json.dump(pred_bboxes, f, indent=4)
-
     print("done!")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -211,28 +219,24 @@ if __name__ == "__main__":
     parser.add_argument("--emb_size", type=int, default=300, help="input size to GRU")
     parser.add_argument("--use_bidir", action="store_true", help="Use bi-directional GRU.")
     parser.add_argument("--use_multi_ref_gt", action="store_true", help="use multiple reference ground truths")
-    args = parser.parse_args()
+    parser.add_argument('--use_votenet_objectness', action="store_true", help='use objectness as it is used by VoteNet')
 
-    # detector related arguments
-    parser.add_argument("--num_proposals", type=int, default=256, help="proposal number")
+    # detector arguments
     parser.add_argument("--width", type=int, default=1, help="PointNet backbone width ratio")
     parser.add_argument("--bn_momentum", type=float, default=0.1, help="batchnorm momentum")
     parser.add_argument("--sync_bn", action="store_true", help="converts all bn layers in SyncBatchNorm layers")
     parser.add_argument("--dropout", type=float, default=0.1, help="dropout probability")
-    parser.add_argument("--activation", type=str, default='relu', choices=["relu", "gelu", "glu"],
-                        help="activation fct used in the decoder layers")
+    parser.add_argument("--activation", type=str, default='relu', choices=["relu", "gelu", "glu"], help="activation fct used in the decoder layers")
     parser.add_argument("--nhead", type=int, default=8, help="parallel attention heads in multihead attention")
     parser.add_argument("--num_decoder_layers", type=int, default=6, help="number of decoder layers")
-    parser.add_argument("--dim_feedforward", type=int, default=2048,
-                        help="hidden size of the linear layers in the decoder")
-    parser.add_argument("--cross_position_embedding", type=str, default='xyz_learned', choices=["none", "xyz_learned"],
-                        help="position embedding for cross-attention")
-    parser.add_argument("--self_position_embedding", type=str, default='loc_learned',
-                        choices=["none", "xyz_learned", "loc_learned"],
-                        help="position embedding for self-attention")
+    parser.add_argument("--dim_feedforward", type=int, default=2048, help="hidden size of the linear layers in the decoder")
+    parser.add_argument("--cross_position_embedding", type=str, default='xyz_learned', choices=["none", "xyz_learned"], help="position embedding for cross-attention")
+    parser.add_argument("--self_position_embedding", type=str, default='loc_learned', choices=["none", "xyz_learned", "loc_learned"], help="position embedding for self-attention")
     parser.add_argument("--size_cls_agnostic", action="store_true", help="use class agnostic predict heads")
     parser.add_argument("--sampling", type=str, default="kps", help="initial object candidate sampling")
     parser.add_argument("--num_features", type=int, default=288, help="number of features of the object proposals")
+
+    args = parser.parse_args()
 
     # setting
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu

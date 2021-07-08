@@ -7,11 +7,11 @@ from models.multi_head_attention import MultiheadAttention
 
 
 class TransformerDecoderLayer(nn.Module):
-    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu",
-                 self_posembed=None, cross_posembed=None):
+    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu", self_posembed=None, cross_posembed=None):
         super().__init__()
         self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout)
         self.multihead_attn = MultiheadAttention(d_model, nhead, dropout=dropout)
+
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)

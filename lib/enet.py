@@ -127,6 +127,7 @@ pooling_0 = StatefulMaxPool2d((2, 2), (2, 2), (0, 0), ceil_mode=False)
 pooling_1 = StatefulMaxPool2d((2, 2), (2, 2), (0, 0), ceil_mode=False)
 pooling_2 = StatefulMaxPool2d((2, 2), (2, 2), (0, 0), ceil_mode=False)
 
+
 def create_enet(num_classes):
     enet = nn.Sequential( # Sequential, 
         LambdaMap(lambda x: x, # ConcatTable, 
