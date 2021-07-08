@@ -72,7 +72,7 @@ class GroupFreeDetector(nn.Module):
         self.size_cls_agnostic = size_cls_agnostic
 
         # Backbone point feature learning
-        self.backbone_net = Pointnet2Backbone(input_feature_dim=self.input_feature_dim)
+        self.backbone_net = Pointnet2Backbone(input_feature_dim=self.input_feature_dim, width=self.width)
 
         # Sampling
         if self.sampling == 'fps':
