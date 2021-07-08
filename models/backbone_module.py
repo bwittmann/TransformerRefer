@@ -3,8 +3,9 @@ import torch.nn as nn
 import sys
 import os
 
-sys.path.append(os.path.join(os.getcwd(), "lib")) # HACK add the lib folder
+sys.path.append(os.path.join(os.getcwd(), "lib"))  # HACK add the lib folder
 from lib.pointnet2.pointnet2_modules import PointnetSAModuleVotes, PointnetFPModule
+
 
 class Pointnet2Backbone(nn.Module):
     r"""
@@ -64,7 +65,6 @@ class Pointnet2Backbone(nn.Module):
         self.fp1 = PointnetFPModule(mlp=[256 * width + 256 * width, 256 * width, 256 * width])
         self.fp2 = PointnetFPModule(mlp=[256 * width + 256 * width, 256 * width, output_feature_dim])
 
-
     def _break_up_pc(self, pc):
         xyz = pc[..., :3].contiguous()
         features = pc[..., 3:].transpose(1, 2).contiguous() if pc.size(-1) > 3 else None
@@ -93,8 +93,6 @@ class Pointnet2Backbone(nn.Module):
         
         pointcloud = data_dict["point_clouds"]
 
-        batch_size = pointcloud.shape[0]
-
         xyz, features = self._break_up_pc(pointcloud)
 
         # --------- 4 SET ABSTRACTION LAYERS ---------
@@ -103,16 +101,16 @@ class Pointnet2Backbone(nn.Module):
         data_dict['sa1_xyz'] = xyz
         data_dict['sa1_features'] = features
 
-        xyz, features, fps_inds = self.sa2(xyz, features) # this fps_inds is just 0,1,...,1023
+        xyz, features, fps_inds = self.sa2(xyz, features)  # this fps_inds is just 0,1,...,1023
         data_dict['sa2_inds'] = fps_inds
         data_dict['sa2_xyz'] = xyz
         data_dict['sa2_features'] = features
 
-        xyz, features, fps_inds = self.sa3(xyz, features) # this fps_inds is just 0,1,...,511
+        xyz, features, fps_inds = self.sa3(xyz, features)  # this fps_inds is just 0,1,...,511
         data_dict['sa3_xyz'] = xyz
         data_dict['sa3_features'] = features
 
-        xyz, features, fps_inds = self.sa4(xyz, features) # this fps_inds is just 0,1,...,255
+        xyz, features, fps_inds = self.sa4(xyz, features)  # this fps_inds is just 0,1,...,255
         data_dict['sa4_xyz'] = xyz
         data_dict['sa4_features'] = features
 
@@ -122,13 +120,14 @@ class Pointnet2Backbone(nn.Module):
         data_dict['fp2_features'] = features
         data_dict['fp2_xyz'] = data_dict['sa2_xyz']
         num_seed = data_dict['fp2_xyz'].shape[1]
-        data_dict['fp2_inds'] = data_dict['sa1_inds'][:,0:num_seed] # indices among the entire input point clouds
+        data_dict['fp2_inds'] = data_dict['sa1_inds'][:,0:num_seed]  # indices among the entire input point clouds
         return data_dict
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     backbone_net = Pointnet2Backbone(input_feature_dim=3).cuda()
     print(backbone_net)
     backbone_net.eval()
-    out = backbone_net(torch.rand(16,20000,6).cuda())
+    out = backbone_net(torch.rand(16, 20000, 6).cuda())
     for key in sorted(out.keys()):
         print(key, '\t', out[key].shape)

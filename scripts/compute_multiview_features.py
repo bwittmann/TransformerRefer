@@ -11,19 +11,20 @@ from imageio import imread
 from PIL import Image
 from tqdm import tqdm
 
-sys.path.append(os.path.join(os.getcwd())) # HACK add the root folder
+sys.path.append(os.path.join(os.getcwd()))  # HACK add the root folder
 from lib.enet import create_enet_for_3d
 from lib.config import CONF
 
 # scannet data
 # NOTE: read only!
 SCANNET_FRAME_ROOT = CONF.SCANNET_FRAMES
-SCANNET_FRAME_PATH = os.path.join(SCANNET_FRAME_ROOT, "{}") # name of the file
+SCANNET_FRAME_PATH = os.path.join(SCANNET_FRAME_ROOT, "{}")  # name of the file
 SCANNET_LIST = CONF.SCANNETV2_LIST
 
 ENET_PATH = CONF.ENET_WEIGHTS
 ENET_FEATURE_ROOT = CONF.ENET_FEATURES_SUBROOT
 ENET_FEATURE_PATH = CONF.ENET_FEATURES_PATH
+
 
 class EnetDataset(Dataset):
     def __init__(self):
@@ -42,14 +43,9 @@ class EnetDataset(Dataset):
         self._get_scene_list()
         self.data = []
         for scene_id in self.scene_list:
-            frame_list = sorted(os.listdir(SCANNET_FRAME_ROOT.format(scene_id, "color")), key=lambda x:int(x.split(".")[0]))
+            frame_list = sorted(os.listdir(SCANNET_FRAME_ROOT.format(scene_id, "color")), key=lambda x: int(x.split(".")[0]))
             for frame_file in frame_list:
-                self.data.append(
-                    (
-                        scene_id,
-                        int(frame_file.split(".")[0])
-                    )
-                )
+                self.data.append((scene_id, int(frame_file.split(".")[0])))
     
     def _get_scene_list(self):
         with open(SCANNET_LIST, 'r') as f:
@@ -68,10 +64,10 @@ class EnetDataset(Dataset):
         image = imread(file)
         # preprocess
         image = self._resize_crop_image(image, image_dims)
-        if len(image.shape) == 3: # color image
+        if len(image.shape) == 3:  # color image
             image = np.transpose(image, [2, 0, 1])  # move feature to front
             image = transforms.Normalize(mean=[0.496342, 0.466664, 0.440796], std=[0.277856, 0.28623, 0.291129])(torch.Tensor(image.astype(np.float32) / 255.0))
-        elif len(image.shape) == 2: # label image
+        elif len(image.shape) == 2:  # label image
             image = np.expand_dims(image, 0)
         else:
             raise ValueError
@@ -83,8 +79,8 @@ class EnetDataset(Dataset):
         scene_ids = list(scene_ids)
         frame_ids = list(frame_ids)
         images = torch.stack(images, 0).cuda()
-
         return scene_ids, frame_ids, images
+
 
 def create_enet():
     enet_fixed, enet_trainable, _ = create_enet_for_3d(41, ENET_PATH, 21)
@@ -95,8 +91,8 @@ def create_enet():
     enet.eval()
     for param in enet.parameters():
         param.requires_grad = False
-
     return enet
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -120,6 +116,4 @@ if __name__ == "__main__":
         for batch_id in range(batch_size):
             os.makedirs(ENET_FEATURE_ROOT.format(scene_ids[batch_id]), exist_ok=True)
             np.save(ENET_FEATURE_PATH.format(scene_ids[batch_id], frame_ids[batch_id]), features[batch_id].cpu().numpy())
-
     print("done!")
-

@@ -40,7 +40,6 @@ class PointsObjClsModule(nn.Module):
         net = F.relu(self.bn1(self.conv1(seed_features)))
         net = F.relu(self.bn2(self.conv2(net)))
         logits = self.conv3(net)  # (batch_size, 1, num_seed)
-
         return logits
 
 
@@ -48,7 +47,6 @@ class PositionEmbeddingLearned(nn.Module):
     """
     Absolute pos embedding, learned.
     """
-
     def __init__(self, input_channel, num_pos_feats=288):
         super().__init__()
         self.position_embedding_head = nn.Sequential(
@@ -79,7 +77,6 @@ class FPSModule(nn.Module):
         xyz_flipped = xyz.transpose(1, 2).contiguous()
         new_xyz = pointnet2_utils.gather_operation(xyz_flipped, sample_inds).transpose(1, 2).contiguous()
         new_features = pointnet2_utils.gather_operation(features, sample_inds).contiguous()
-
         return new_xyz, new_features, sample_inds
 
 
@@ -96,13 +93,11 @@ class GeneralSamplingModule(nn.Module):
         xyz_flipped = xyz.transpose(1, 2).contiguous()
         new_xyz = pointnet2_utils.gather_operation(xyz_flipped, sample_inds).transpose(1, 2).contiguous()
         new_features = pointnet2_utils.gather_operation(features, sample_inds).contiguous()
-
         return new_xyz, new_features, sample_inds
 
 
 class PredictHead(nn.Module):
-    def __init__(self, num_class, num_heading_bin, num_size_cluster,
-                 mean_size_arr, num_proposal, seed_feat_dim=256):
+    def __init__(self, num_class, num_heading_bin, num_size_cluster, mean_size_arr, num_proposal, seed_feat_dim=256):
         super().__init__()
 
         self.num_class = num_class
@@ -119,9 +114,7 @@ class PredictHead(nn.Module):
         self.bn1 = torch.nn.BatchNorm1d(seed_feat_dim)
         self.conv2 = torch.nn.Conv1d(seed_feat_dim, seed_feat_dim, 1)
         self.bn2 = torch.nn.BatchNorm1d(seed_feat_dim)
-
         self.objectness_scores_head = torch.nn.Conv1d(seed_feat_dim, 1, 1)
-
         self.center_residual_head = torch.nn.Conv1d(seed_feat_dim, 3, 1)
         self.heading_class_head = torch.nn.Conv1d(seed_feat_dim, num_heading_bin, 1)
         self.heading_residual_head = torch.nn.Conv1d(seed_feat_dim, num_heading_bin, 1)
@@ -136,7 +129,6 @@ class PredictHead(nn.Module):
         Returns:
             scores: (B,num_proposal,2+3+NH*2+NS*4)
         """
-
         batch_size = features.shape[0]
         num_proposal = features.shape[-1]
         net = F.relu(self.bn1(self.conv1(features)))
@@ -159,8 +151,7 @@ class PredictHead(nn.Module):
         mean_size_arr = torch.from_numpy(self.mean_size_arr.astype(np.float32)).cuda()  # (num_size_cluster, 3)
         mean_size_arr = mean_size_arr.unsqueeze(0).unsqueeze(0)  # (1, 1, num_size_cluster, 3)
         size_scores = self.size_class_head(net).transpose(2, 1)  # (batch_size, num_proposal, num_size_cluster)
-        size_residuals_normalized = self.size_residual_head(net).transpose(2, 1).view(
-            [batch_size, num_proposal, self.num_size_cluster, 3])  # (batch_size, num_proposal, num_size_cluster, 3)
+        size_residuals_normalized = self.size_residual_head(net).transpose(2, 1).view([batch_size, num_proposal, self.num_size_cluster, 3])  # (batch_size, num_proposal, num_size_cluster, 3)
         size_residuals = size_residuals_normalized * mean_size_arr  # (batch_size, num_proposal, num_size_cluster, 3)
         size_recover = size_residuals + mean_size_arr  # (batch_size, num_proposal, num_size_cluster, 3)
         pred_size_class = torch.argmax(size_scores, -1)  # batch_size, num_proposal
@@ -228,13 +219,14 @@ class ClsAgnosticPredictHead(nn.Module):
         Returns:
             scores: (B,num_proposal,2+3+NH*2+NS*4)
         """
-
         batch_size = features.shape[0]
         num_proposal = features.shape[-1]
         net = F.relu(self.bn1(self.conv1(features)))
         net = F.relu(self.bn2(self.conv2(net)))
+
         # objectness
         objectness_scores = self.objectness_scores_head(net).transpose(2, 1)  # (batch_size, num_proposal, 1)
+
         # center
         center_residual = self.center_residual_head(net).transpose(2, 1)  # (batch_size, num_proposal, 3)
         center = base_xyz + center_residual  # (batch_size, num_proposal, 3)
@@ -246,8 +238,7 @@ class ClsAgnosticPredictHead(nn.Module):
         heading_residuals = heading_residuals_normalized * (np.pi / self.num_heading_bin)
 
         # size
-        pred_size = self.size_pred_head(net).transpose(2, 1).view(
-            [batch_size, num_proposal, 3])  # (batch_size, num_proposal, 3)
+        pred_size = self.size_pred_head(net).transpose(2, 1).view([batch_size, num_proposal, 3])  # (batch_size, num_proposal, 3)
 
         # class
         sem_cls_scores = self.sem_cls_scores_head(net).transpose(2, 1)  # (batch_size, num_proposal, num_class)

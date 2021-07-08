@@ -4,14 +4,14 @@ from torch.optim.lr_scheduler import _LRScheduler, MultiStepLR, CosineAnnealingL
 
 # noinspection PyAttributeOutsideInit
 class GradualWarmupScheduler(_LRScheduler):
-    """ Gradually warm-up(increasing) learning rate in optimizer.
-      Proposed in 'Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour'.
-      Args:
-          optimizer (Optimizer): Wrapped optimizer.
-          multiplier: init learning rate = base lr / multiplier
-          warmup_epoch: target learning rate is reached at warmup_epoch, gradually
-          after_scheduler: after target_epoch, use this scheduler(eg. ReduceLROnPlateau)
-      """
+    """Gradually warm-up(increasing) learning rate in optimizer.
+    Proposed in 'Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour'.
+    Args:
+        optimizer (Optimizer): Wrapped optimizer.
+        multiplier: init learning rate = base lr / multiplier
+        warmup_epoch: target learning rate is reached at warmup_epoch, gradually
+        after_scheduler: after target_epoch, use this scheduler(eg. ReduceLROnPlateau)
+    """
 
     def __init__(self, optimizer, multiplier, warmup_epoch, after_scheduler, last_epoch=-1):
         self.multiplier = multiplier
@@ -26,8 +26,7 @@ class GradualWarmupScheduler(_LRScheduler):
         if self.last_epoch > self.warmup_epoch:
             return self.after_scheduler.get_lr()
         else:
-            return [base_lr / self.multiplier * ((self.multiplier - 1.) * self.last_epoch / self.warmup_epoch + 1.)
-                    for base_lr in self.base_lrs]
+            return [base_lr / self.multiplier * ((self.multiplier - 1.) * self.last_epoch / self.warmup_epoch + 1.) for base_lr in self.base_lrs]
 
     def step(self, epoch=None):
         if epoch is None:

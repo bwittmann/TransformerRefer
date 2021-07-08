@@ -79,14 +79,12 @@ def parse_predictions(end_points, config_dict):
     # assume upright_camera coord.
     bsize = pred_center.shape[0]
     pred_corners_3d_upright_camera = np.zeros((bsize, num_proposal, 8, 3))
-    pred_center_upright_camera = flip_axis_to_camera(pred_center.detach().cpu().numpy())  # TODO: switched comment line
+    pred_center_upright_camera = flip_axis_to_camera(pred_center.detach().cpu().numpy())  # TODO: switched comment line with the one below
     # pred_center_upright_camera = pred_center.detach().cpu().numpy()
     for i in range(bsize):
         for j in range(num_proposal):
-            heading_angle = config_dict['dataset_config'].class2angle(
-                pred_heading_class[i, j].detach().cpu().numpy(), pred_heading_residual[i, j].detach().cpu().numpy())
-            box_size = config_dict['dataset_config'].class2size(
-                int(pred_size_class[i, j].detach().cpu().numpy()), pred_size_residual[i, j].detach().cpu().numpy())
+            heading_angle = config_dict['dataset_config'].class2angle(pred_heading_class[i, j].detach().cpu().numpy(), pred_heading_residual[i, j].detach().cpu().numpy())
+            box_size = config_dict['dataset_config'].class2size(int(pred_size_class[i, j].detach().cpu().numpy()), pred_size_residual[i, j].detach().cpu().numpy())
             corners_3d_upright_camera = get_3d_box(box_size, heading_angle, pred_center_upright_camera[i, j, :])
             pred_corners_3d_upright_camera[i, j] = corners_3d_upright_camera
 
@@ -123,8 +121,7 @@ def parse_predictions(end_points, config_dict):
                 boxes_2d_with_prob[j, 3] = np.max(pred_corners_3d_upright_camera[i, j, :, 2])
                 boxes_2d_with_prob[j, 4] = obj_prob[i, j]
             nonempty_box_inds = np.where(nonempty_box_mask[i, :] == 1)[0]
-            pick = nms_2d_faster(boxes_2d_with_prob[nonempty_box_mask[i, :] == 1, :],
-                                 config_dict['nms_iou'], config_dict['use_old_type_nms'])
+            pick = nms_2d_faster(boxes_2d_with_prob[nonempty_box_mask[i, :] == 1, :], config_dict['nms_iou'], config_dict['use_old_type_nms'])
             assert (len(pick) > 0)
             pred_mask[i, nonempty_box_inds[pick]] = 1
         # ---------- NMS output: pred_mask in (B,K) -----------
@@ -142,8 +139,7 @@ def parse_predictions(end_points, config_dict):
                 boxes_3d_with_prob[j, 5] = np.max(pred_corners_3d_upright_camera[i, j, :, 2])
                 boxes_3d_with_prob[j, 6] = obj_prob[i, j]
             nonempty_box_inds = np.where(nonempty_box_mask[i, :] == 1)[0]
-            pick = nms_3d_faster(boxes_3d_with_prob[nonempty_box_mask[i, :] == 1, :],
-                                 config_dict['nms_iou'], config_dict['use_old_type_nms'])
+            pick = nms_3d_faster(boxes_3d_with_prob[nonempty_box_mask[i, :] == 1, :], config_dict['nms_iou'], config_dict['use_old_type_nms'])
             assert (len(pick) > 0)
             pred_mask[i, nonempty_box_inds[pick]] = 1
         # ---------- NMS output: pred_mask in (B,K) -----------
@@ -162,8 +158,7 @@ def parse_predictions(end_points, config_dict):
                 boxes_3d_with_prob[j, 6] = obj_prob[i, j]
                 boxes_3d_with_prob[j, 7] = pred_sem_cls[i, j]  # only suppress if the two boxes are of the same class!!
             nonempty_box_inds = np.where(nonempty_box_mask[i, :] == 1)[0]
-            pick = nms_3d_faster_samecls(boxes_3d_with_prob[nonempty_box_mask[i, :] == 1, :],
-                                         config_dict['nms_iou'], config_dict['use_old_type_nms'])
+            pick = nms_3d_faster_samecls(boxes_3d_with_prob[nonempty_box_mask[i, :] == 1, :], config_dict['nms_iou'], config_dict['use_old_type_nms'])
             # assert (len(pick) > 0)
             if len(pick) > 0:
                 pred_mask[i, nonempty_box_inds[pick]] = 1
@@ -217,22 +212,19 @@ def parse_groundtruths(end_points, config_dict):
 
     K2 = center_label.shape[1]  # K2==MAX_NUM_OBJ
     gt_corners_3d_upright_camera = np.zeros((bsize, K2, 8, 3))
-    gt_center_upright_camera = flip_axis_to_camera(center_label[:,:,0:3].detach().cpu().numpy())  # TODO: switched comment line
+    gt_center_upright_camera = flip_axis_to_camera(center_label[:,:,0:3].detach().cpu().numpy())  # TODO: switched comment line with the one below
     # gt_center_upright_camera = center_label[:, :, 0:3].detach().cpu().numpy()
     for i in range(bsize):
         for j in range(K2):
             if box_label_mask[i, j] == 0: continue
-            heading_angle = config_dict['dataset_config'].class2angle(heading_class_label[i, j].detach().cpu().numpy(),
-                                                                      heading_residual_label[i, j].detach().cpu().numpy())
-            box_size = config_dict['dataset_config'].class2size(int(size_class_label[i, j].detach().cpu().numpy()),
-                                                                size_residual_label[i, j].detach().cpu().numpy())
+            heading_angle = config_dict['dataset_config'].class2angle(heading_class_label[i, j].detach().cpu().numpy(), heading_residual_label[i, j].detach().cpu().numpy())
+            box_size = config_dict['dataset_config'].class2size(int(size_class_label[i, j].detach().cpu().numpy()), size_residual_label[i, j].detach().cpu().numpy())
             corners_3d_upright_camera = get_3d_box(box_size, heading_angle, gt_center_upright_camera[i, j, :])
             gt_corners_3d_upright_camera[i, j] = corners_3d_upright_camera
 
     batch_gt_map_cls = []
     for i in range(bsize):
-        batch_gt_map_cls.append([(sem_cls_label[i, j].item(), gt_corners_3d_upright_camera[i, j]) for j in
-                                 range(gt_corners_3d_upright_camera.shape[1]) if box_label_mask[i, j] == 1])
+        batch_gt_map_cls.append([(sem_cls_label[i, j].item(), gt_corners_3d_upright_camera[i, j]) for j in range(gt_corners_3d_upright_camera.shape[1]) if box_label_mask[i, j] == 1])
     end_points['batch_gt_map_cls'] = batch_gt_map_cls
 
     return batch_gt_map_cls
@@ -240,7 +232,6 @@ def parse_groundtruths(end_points, config_dict):
 
 class APCalculator(object):
     """ Calculating Average Precision """
-
     def __init__(self, ap_iou_thresh=0.25, class2type_map=None):
         """
         Args:
@@ -260,7 +251,6 @@ class APCalculator(object):
             batch_gt_map_cls: a list of lists [[(gt_cls, gt_box_params),...],...]
                 should have the same length with batch_pred_map_cls (batch_size)
         """
-
         bsize = len(batch_pred_map_cls)
         assert (bsize == len(batch_gt_map_cls))
         for i in range(bsize):
@@ -269,10 +259,8 @@ class APCalculator(object):
             self.scan_cnt += 1
 
     def compute_metrics(self):
-        """ Use accumulated predictions and groundtruths to compute Average Precision.
-        """
-        rec, prec, ap = eval_det_multiprocessing(self.pred_map_cls, self.gt_map_cls, ovthresh=self.ap_iou_thresh,
-                                                 get_iou_func=get_iou_obb)
+        """ Use accumulated predictions and groundtruths to compute Average Precision."""
+        rec, prec, ap = eval_det_multiprocessing(self.pred_map_cls, self.gt_map_cls, ovthresh=self.ap_iou_thresh, get_iou_func=get_iou_obb)
         ret_dict = {}
         for key in sorted(ap.keys()):
             clsname = self.class2type_map[key] if self.class2type_map else str(key)

@@ -27,9 +27,6 @@ SCANREFER_VAL = json.load(open(os.path.join(CONF.PATH.DATA, "ScanRefer_filtered_
 # constants
 DC = ScannetDatasetConfig()
 
-# TODO: for debugging warnings
-#np.seterr(all='raise')
-
 
 def get_dataloader(args, scanrefer, all_scene_list, split):
     dataset = ScannetReferenceDataset(
@@ -44,32 +41,28 @@ def get_dataloader(args, scanrefer, all_scene_list, split):
         augment=args.augment
     )
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
-
     return dataset, dataloader
 
 
 def get_model(args):
     # initiate model
-    input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(
-        not args.no_height)
-
+    input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(not args.no_height)
     detector_args = {
-        'width' : args.width,
-        'bn_momentum' : args.bn_momentum,
-        'sync_bn' : args.sync_bn,
-        'dropout' : args.dropout,
-        'activation' : args.activation,
-        'nhead' : args.nhead,
-        'num_decoder_layers' : args.num_decoder_layers,
-        'dim_feedforward' : args.dim_feedforward,
-        'cross_position_embedding' : args.cross_position_embedding,
-        'size_cls_agnostic' : args.size_cls_agnostic,
-        'num_proposals' : args.num_proposals,
-        'sampling' : args.sampling,
-        'self_position_embedding' : args.self_position_embedding,
-        'num_features' : args.num_features
+        'width': args.width,
+        'bn_momentum': args.bn_momentum,
+        'sync_bn': args.sync_bn,
+        'dropout': args.dropout,
+        'activation': args.activation,
+        'nhead': args.nhead,
+        'num_decoder_layers': args.num_decoder_layers,
+        'dim_feedforward': args.dim_feedforward,
+        'cross_position_embedding': args.cross_position_embedding,
+        'size_cls_agnostic': args.size_cls_agnostic,
+        'num_proposals': args.num_proposals,
+        'sampling': args.sampling,
+        'self_position_embedding': args.self_position_embedding,
+        'num_features': args.num_features
     }
-
     model = RefNetV2(
         num_class=DC.num_class,
         num_heading_bin=DC.num_heading_bin,
@@ -84,13 +77,12 @@ def get_model(args):
         use_multi_ref_gt=args.use_multi_ref_gt
     )
 
-    # from pretrained scanrefer model with transformer
-    if args.use_pretrained or args.use_pretrained_ref:
+    # from pretrained scanrefer model with transformer detector
+    if args.use_pretrained_det or args.use_pretrained_ref:
         if args.use_pretrained_ref:
             print(f"loading pretrained ScanRefer model with GroupFreeTransformer from {args.use_pretrained_ref}...")
         else:
-            print(f"loading pretrained ScanRefer model with GroupFreeTransformer, only detector, from {args.use_pretrained}...")
-
+            print(f"loading pretrained ScanRefer model with GroupFreeTransformer, only detector, from {args.use_pretrained_det}...")
         pretrained_model = RefNetV2(
             num_class=DC.num_class,
             num_heading_bin=DC.num_heading_bin,
@@ -104,10 +96,8 @@ def get_model(args):
             emb_size=args.emb_size,
             use_multi_ref_gt=args.use_multi_ref_gt
         )
-
-        path_name = args.use_pretrained if args.use_pretrained else args.use_pretrained_ref
-
-        pretrained_path = os.path.join(CONF.PATH.OUTPUT, path_name, "model_last.pth")
+        path_name = args.use_pretrained_det if args.use_pretrained_det else args.use_pretrained_ref
+        pretrained_path = os.path.join(CONF.PATH.OUTPUT, path_name, "model.pth")
         pretrained_model.load_state_dict(torch.load(pretrained_path), strict=False)
 
         # mount
@@ -120,18 +110,16 @@ def get_model(args):
     if args.use_pretrained_transformer:
         # pretrained detector uses feature dim of 288 exclusively
         assert args.num_features == 288
-
         print("loading pretrained GroupFreeDetector...")
-
         pretrained_detector = GroupFreeDetector(
             num_class=DC.num_class,
             num_heading_bin=DC.num_heading_bin,
             num_size_cluster=DC.num_size_cluster,
             mean_size_arr=DC.mean_size_arr,
             input_feature_dim=0,
-            width= detector_args['width'],
-            bn_momentum= detector_args['bn_momentum'], 
-            sync_bn= detector_args['sync_bn'], 
+            width=detector_args['width'],
+            bn_momentum=detector_args['bn_momentum'],
+            sync_bn=detector_args['sync_bn'],
             num_proposal=detector_args['num_proposals'],
             sampling=detector_args['sampling'],
             dropout=detector_args['dropout'],
@@ -155,16 +143,14 @@ def get_model(args):
         del checkpoint
         torch.cuda.empty_cache()
 
+        # mount
         model.detector = pretrained_detector
-
 
     # load pretrained backbone
     if args.use_pretrained_backbone:
         print("loading pretrained Pointnet2Backbone...")
-
         pretrained_backbone = Pointnet2Backbone(input_channels, args.num_features)
         backbone_state_dict = torch.load(args.use_pretrained_backbone, map_location='cpu')
-        
         try:
             # load state dict from pre-trained vanilla scanrefer
             new_state_dict = OrderedDict((k[13:], v) for k, v in backbone_state_dict.items() if k[:4] == 'back')
@@ -173,10 +159,10 @@ def get_model(args):
             # load state dict from pre-trained transformer-based detector
             new_state_dict = OrderedDict((k[20:], v) for k, v in backbone_state_dict['model'].items() if k[:11] == 'module.back')
             pretrained_backbone.load_state_dict(new_state_dict)
-
         del backbone_state_dict
         torch.cuda.empty_cache()
 
+        # mount
         model.detector.backbone_net = pretrained_backbone
 
     # freeze parts of the detector
@@ -189,38 +175,35 @@ def get_model(args):
         # freeze complete detector
         for param in model.detector.parameters():
             param.requires_grad = False
-
         # unfreeze up to prediction heads
         for param in model.detector.prediction_heads.parameters():
             param.requires_grad = True
+
     elif args.freeze_transformer_layers == 'up_to_decoder_fc':
         # freeze complete detector
         for param in model.detector.parameters():
             param.requires_grad = False
-
         # unfreeze up to transfomer linear layers (linear1 and linear2)
         for param in model.detector.prediction_heads.parameters():
             param.requires_grad = True
-
-        for layer in range(6):
+        for layer in range(args.num_decoder_layers):
             for param in model.detector.decoder[layer].linear1.parameters():
                 param.requires_grad = True
             for param in model.detector.decoder[layer].linear2.parameters():
                 param.requires_grad = True
+
     elif args.freeze_transformer_layers == 'only_backbone':
         for param in model.detector.backbone_net.parameters():
             param.requires_grad = False
 
     # to CUDA
     model = model.cuda()
-
     return model
 
 
 def get_num_params(model):
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     num_params = int(sum([np.prod(p.size()) for p in model_parameters]))
-
     return num_params
 
 
@@ -232,7 +215,6 @@ def get_solver(args, dataloader):
     non_detector_params = []
     detector_params = []
     detector_decoder_params = []
-
     for param_name, param in model.named_parameters():
         if not param.requires_grad:
             continue
@@ -243,26 +225,18 @@ def get_solver(args, dataloader):
                 detector_params.append(param)
         else:
             non_detector_params.append(param)
-
     param_dicts = [
         {"params": non_detector_params},
-        {"params": detector_params,
-            "lr": args.lr_detector,
-            "weight_decay": args.wd_detector},
-        {"params": detector_decoder_params,
-            "lr": args.lr_detector_decoder,
-            "weight_decay": args.wd_detector}
+        {"params": detector_params, "lr": args.lr_detector, "weight_decay": args.wd_detector},
+        {"params": detector_decoder_params, "lr": args.lr_detector_decoder, "weight_decay": args.wd_detector}
     ]
-    optimizer = optim.AdamW(param_dicts,
-                            lr=args.lr,
-                            weight_decay=args.wd)
+    optimizer = optim.AdamW(param_dicts, lr=args.lr, weight_decay=args.wd)
 
     # get learning rate and batch norm scheduler
-    lr_scheduler = get_scheduler(optimizer, args.epoch, args.lr_scheduler,
-                                    args.lr_decay_epochs, args.lr_decay_rate, args.warmup_epoch,
-                                    args.warmup_multiplier, args.lr_patience, args.lr_threshold, args.lr_cooldown)
+    lr_scheduler_args = (args.epoch, args.lr_scheduler, args.lr_decay_epochs, args.lr_decay_rate, args.warmup_epoch,
+                         args.warmup_multiplier, args.lr_patience, args.lr_threshold, args.lr_cooldown)
+    lr_scheduler = get_scheduler(optimizer, *lr_scheduler_args)
     bn_scheduler = None
-    
 
     # load checkpoint
     if args.use_checkpoint:
@@ -274,26 +248,26 @@ def get_solver(args, dataloader):
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
     else:
         stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        if args.tag: stamp += "_" + args.tag.upper()
+        if args.tag:
+            stamp += "_" + args.tag.upper()
         root = os.path.join(CONF.PATH.OUTPUT, stamp)
         os.makedirs(root, exist_ok=True)
 
-    loss_args = {
-        "query_points_generator_loss_coef" : args.query_points_generator_loss_coef,
-        "obj_loss_coef" : args.obj_loss_coef,
-        "box_loss_coef" : args.box_loss_coef,
-        "sem_cls_loss_coef" : args.sem_cls_loss_coef,
-        "center_delta" : args.center_delta,
-        "size_delta" : args.size_delta,
-        "heading_delta" : args.heading_delta,
-        "detection_loss_coef" : args.detection_loss_coef,
-        "ref_loss_coef" : args.ref_loss_coef,
-        "lang_loss_coef" : args.lang_loss_coef,
-        "use_votenet_objectness" : args.use_votenet_objectness,
-        "use_multi_ref_gt" : args.use_multi_ref_gt
-    }
-
     # get solver
+    loss_args = {
+        "query_points_generator_loss_coef": args.query_points_generator_loss_coef,
+        "obj_loss_coef": args.obj_loss_coef,
+        "box_loss_coef": args.box_loss_coef,
+        "sem_cls_loss_coef": args.sem_cls_loss_coef,
+        "center_delta": args.center_delta,
+        "size_delta": args.size_delta,
+        "heading_delta": args.heading_delta,
+        "detection_loss_coef": args.detection_loss_coef,
+        "ref_loss_coef": args.ref_loss_coef,
+        "lang_loss_coef": args.lang_loss_coef,
+        "use_votenet_objectness": args.use_votenet_objectness,
+        "use_multi_ref_gt": args.use_multi_ref_gt
+    }
     solver = Solver(
         model=model,
         config=DC,
@@ -313,7 +287,6 @@ def get_solver(args, dataloader):
         validate_detection=args.validate_detection
     )
     num_params = get_num_params(model)
-
     return solver, num_params, root
 
 
@@ -321,13 +294,11 @@ def save_info(args, root, num_params, train_dataset, val_dataset):
     info = {}
     for key, value in vars(args).items():
         info[key] = value
-
     info["num_train"] = len(train_dataset)
     info["num_val"] = len(val_dataset)
     info["num_train_scenes"] = len(train_dataset.scene_list)
     info["num_val_scenes"] = len(val_dataset.scene_list)
     info["num_params"] = num_params
-
     with open(os.path.join(root, "info.json"), "w") as f:
         json.dump(info, f, indent=4)
 
@@ -335,19 +306,18 @@ def save_info(args, root, num_params, train_dataset, val_dataset):
 def get_scannet_scene_list(split):
     scene_list = sorted(
         [line.rstrip() for line in open(os.path.join(CONF.PATH.SCANNET_META, "scannetv2_{}.txt".format(split)))])
-
     return scene_list
 
 
 def get_scanrefer(scanrefer_train, scanrefer_val, args):
     if args.no_reference:
+        # get the entire scannet dataset, each sample is a scene (instead of scene/ref_box - description pair)
         train_scene_list = get_scannet_scene_list("train")
         new_scanrefer_train = []
         for scene_id in train_scene_list:
             data = deepcopy(SCANREFER_TRAIN[0])
             data["scene_id"] = scene_id
             new_scanrefer_train.append(data)
-
         val_scene_list = get_scannet_scene_list("val")
         new_scanrefer_val = []
         for scene_id in val_scene_list:
@@ -377,9 +347,7 @@ def get_scanrefer(scanrefer_train, scanrefer_val, args):
 
     # all scanrefer scene
     all_scene_list = train_scene_list + val_scene_list
-
     print("train on {} samples and val on {} samples".format(len(new_scanrefer_train), len(new_scanrefer_val)))
-
     return new_scanrefer_train, new_scanrefer_val, all_scene_list
 
 
@@ -410,14 +378,14 @@ def train(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    # general arguments
+
+    # train and model
     parser.add_argument("--tag", type=str, help="tag for the training, e.g. cuda_wl", default="")
     parser.add_argument("--gpu", type=str, help="gpu", default="0")
     parser.add_argument("--num_workers", type=int, help="number of workers for dataloader", default=4)
     parser.add_argument("--batch_size", type=int, help="batch size", default=14)
     parser.add_argument("--epoch", type=int, help="number of epochs", default=50)
     parser.add_argument("--verbose", type=int, help="iterations of showing verbose", default=10)
-    parser.add_argument("--val_step", type=int, help="iterations of validating", default=5000)
     parser.add_argument("--num_points", type=int, default=50000, help="point number")
     parser.add_argument("--num_scenes", type=int, default=-1, help="number of scenes")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
@@ -425,41 +393,37 @@ if __name__ == "__main__":
     parser.add_argument("--no_lang_cls", action="store_true", help="do NOT use language classifier")
     parser.add_argument("--use_bidir", action="store_true", help="use bi-directional GRU")
     parser.add_argument("--emb_size", type=int, default=300, help="input size to GRU")
+    parser.add_argument("--no_reference", action="store_true", help="do NOT train the localization module")
+    parser.add_argument("--no_detection", action="store_true", help="do NOT train the detection module")
+
+    # validation
+    parser.add_argument("--val_step", type=int, help="iterations of validating", default=5000)
     parser.add_argument("--no_validation", action="store_true", help="do NOT validate; only for development debugging")
     parser.add_argument("--validate_detection", action="store_true", help="for validation also calculate the detection mAPs")
 
-
-    # input feature arguments
+    # input features
     parser.add_argument("--no_height", action="store_true", help="do NOT use height signal in input")
     parser.add_argument("--use_color", action="store_true", help="use RGB color in input")
     parser.add_argument("--use_normal", action="store_true", help="use normals in input")
     parser.add_argument("--use_multiview", action="store_true", help="use multiview images")
 
-
-    # optim arguments
-    parser.add_argument("--no_reference", action="store_true", help="do NOT train the localization module")
-    parser.add_argument("--no_detection", action="store_true", help="do NOT train the detection module")
-
-    parser.add_argument("--use_pretrained", type=str, help="specify the folder name in outputs containing the pretrained model, detector used")
+    # pre-trained
+    parser.add_argument("--use_pretrained_det", type=str, help="specify the folder name in outputs containing the pretrained model, detector used")
     parser.add_argument("--use_pretrained_ref", type=str, help="specify the folder name in outputs containing the pretrained model, entire model used")
-    parser.add_argument("--use_pretrained_transformer", type=str, help="specify the absolute file path for pretrained GroupFreeDetector module")    #TODO rename
+    parser.add_argument("--use_pretrained_transformer", type=str, help="specify the absolute file path for pretrained GroupFreeDetector module")
     parser.add_argument("--use_pretrained_backbone", type=str, help="specify the absolute file path for pretrained pointnet++ backbone")
     parser.add_argument("--use_checkpoint", type=str, help="specify the checkpoint root", default="")
+    parser.add_argument("--freeze_transformer_layers", type=str, default="none",  help="do NOT train parts of the detection module",
+                        choices=["none", "all", "up_to_pred_heads", "up_to_decoder_fc", "only_backbone"])
 
-    parser.add_argument("--freeze_transformer_layers", type=str, default="none",  help="do NOT train parts of the trans. detection module",
-                        choices=["none", "all", "up_to_pred_heads", "up_to_decoder_fc", "only_backbone"])     
-
+    # optimizer
     parser.add_argument("--wd", type=float, help="weight decay", default=0.0005)
     parser.add_argument('--wd_detector', type=float, default=0.0005, help="L2 weight decay of the detector")
-
-    parser.add_argument("--lr", type=float, help="learning rate of localization part", default=1e-3)
+    parser.add_argument("--lr", type=float, help="learning rate of language and reference modules", default=1e-3)
     parser.add_argument('--lr_detector', type=float, default=0.006, help='initial detector learning rate for all except decoder')
     parser.add_argument('--lr_detector_decoder', type=float, default=0.0006, help='initial learning rate for decoder')
-
     parser.add_argument('--lr_scheduler', type=str, default='step', choices=["step", "cosine", "plateau"], help="learning rate scheduler")
-
-    parser.add_argument('--lr_decay_epochs', type=int, default=[280, 340], nargs='+',
-                        help='for step scheduler; where to decay lr can be a list (add multiple space-separated values).')
+    parser.add_argument('--lr_decay_epochs', type=int, default=[280, 340], nargs='+', help='for step scheduler, when to decay lr (multiple space-separated values).')
     parser.add_argument('--lr_decay_rate', type=float, default=0.1, help='for step scheduler; decay rate for learning rate')
     parser.add_argument('--lr_patience', type=int, default=10, help='patience for plateau lr scheduler')
     parser.add_argument('--lr_threshold', type=float, default=1e-4, help='measures new optimum for plateau lr scheduler')
@@ -468,25 +432,21 @@ if __name__ == "__main__":
     parser.add_argument('--warmup_multiplier', type=int, default=100, help='warmup multiplier')
     parser.add_argument('--clip_norm', default=0.1, type=float, help='gradient clipping max norm')
 
-
-    # loss related arguments
+    # loss
     parser.add_argument('--use_votenet_objectness', action="store_true", help='use objectness as it is used by VoteNet')
     parser.add_argument('--use_multi_ref_gt', action="store_true", help='use multiple reference ground truths')
-
-    parser.add_argument('--detection_loss_coef', default=1., type=float, help='loss weight for detection loss')  #TODO rename
+    parser.add_argument('--detection_loss_coef', default=1., type=float, help='loss weight for detection loss')
     parser.add_argument('--ref_loss_coef', default=0.1, type=float, help='loss weight for ref loss')
     parser.add_argument('--lang_loss_coef', default=0.1, type=float, help='loss weight for lang loss')
     parser.add_argument('--query_points_generator_loss_coef', default=0.8, type=float)
     parser.add_argument('--obj_loss_coef', default=0.2, type=float, help='loss weight for objectness loss')
     parser.add_argument('--box_loss_coef', default=1, type=float, help='loss weight for box loss')
     parser.add_argument('--sem_cls_loss_coef', default=0.1, type=float, help='loss weight for classification loss')
-
     parser.add_argument('--center_delta', default=0.04, type=float, help='delta for smoothl1 loss in center loss')
     parser.add_argument('--size_delta', default=0.111111111111, type=float, help='delta for smoothl1 loss in size loss')
     parser.add_argument('--heading_delta', default=1.0, type=float, help='delta for smoothl1 loss in heading loss')
 
-
-    # detector related arguments
+    # detector
     parser.add_argument("--num_proposals", type=int, default=256, help="proposal number")
     parser.add_argument("--width", type=int, default=1, help="PointNet backbone width ratio")
     parser.add_argument("--bn_momentum", type=float, default=0.1, help="batchnorm momentum")
@@ -497,13 +457,12 @@ if __name__ == "__main__":
     parser.add_argument("--num_decoder_layers", type=int, default=6, help="number of decoder layers")
     parser.add_argument("--num_features", type=int, default=288, help="number of features of the object proposals")
     parser.add_argument("--dim_feedforward", type=int, default=2048, help="hidden size of the linear layers in the decoder")
-    parser.add_argument("--cross_position_embedding", type=str, default='xyz_learned', choices=["none", "xyz_learned"], 
-                        help="position embedding for cross-attention")
-    parser.add_argument("--self_position_embedding", type=str, default='loc_learned', choices=["none", "xyz_learned", "loc_learned"], 
-                        help="position embedding for self-attention")
+    parser.add_argument("--cross_position_embedding", type=str, default='xyz_learned',
+                        choices=["none", "xyz_learned"], help="position embedding for cross-attention")
+    parser.add_argument("--self_position_embedding", type=str, default='loc_learned',
+                        choices=["none", "xyz_learned", "loc_learned"], help="position embedding for self-attention")
     parser.add_argument("--size_cls_agnostic", action="store_true", help="use class agnostic predict heads")
     parser.add_argument("--sampling", type=str, default="kps", help="initial object candidate sampling")
-
 
     args = parser.parse_args()
 

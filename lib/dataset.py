@@ -2,7 +2,6 @@
 File Created: Monday, 25th November 2019 1:35:30 pm
 Author: Dave Zhenyu Chen (zhenyu.chen@tum.de)
 '''
-
 import os
 import sys
 import time
@@ -30,10 +29,9 @@ GLOVE_PICKLE = os.path.join(CONF.PATH.DATA, "glove.p")
 
 
 class ScannetReferenceDataset(Dataset):
-
     def __init__(self, scanrefer, scanrefer_all_scene,
                  split="train",
-                 num_points=40000,
+                 num_points=50000,
                  use_height=False,
                  use_color=False,
                  use_normal=False,
@@ -166,18 +164,6 @@ class ScannetReferenceDataset(Dataset):
             gt_centers = target_bboxes[:, 0:3]
             gt_centers[num_bbox:, :] += 1000.0  # padding centers of invalid objects with a large number
 
-            # compute votes *AFTER* augmentation
-            # generate votes
-            # Note: since there's no map between bbox instance labels and
-            # pc instance_labels (it had been filtered 
-            # in the data preparation step) we'll compute the instance bbox
-            # from the points sharing the same instance label.
-
-            # votenet
-            point_votes = np.zeros([self.num_points, 3])
-            point_votes_mask = np.zeros(self.num_points)
-
-            # transformer
             point_obj_mask = np.zeros(self.num_points)
             point_instance_label = np.zeros(self.num_points) - 1
 
@@ -188,20 +174,9 @@ class ScannetReferenceDataset(Dataset):
                 if semantic_labels[ind[0]] in DC.nyu40ids:
                     x = point_cloud[ind, :3]
                     center = 0.5 * (x.min(0) + x.max(0))
-                    # votenet
-                    point_votes[ind, :] = center - x
-                    point_votes_mask[ind] = 1.0
-                    # transformer
-                    # TODO: why do this? what is the difference to just having the instance_labels directly?
-                    #  -> to me it seems as though [DC.nyu40id2class[int(x)] for x in instance_bboxes[:, -2][0:num_bbox]]
-                    #  , but I guess this way is safer.
-                    #  ilabel is which ith bbox the point belongs to (i as index of our arry, oppesed to the number
-                    #  assigned by dataset - we dont have all boxes for object detection)
                     ilabel = np.argmin(((center - gt_centers) ** 2).sum(-1))
                     point_instance_label[ind] = ilabel
                     point_obj_mask[ind] = 1.0
-
-            point_votes = np.tile(point_votes, (1, 3))  # make 3 votes identical
 
             class_ind = [DC.nyu40id2class[int(x)] for x in instance_bboxes[:num_bbox, -2]]
             # NOTE: set size class as semantic class. Consider use size2class.
@@ -221,14 +196,12 @@ class ScannetReferenceDataset(Dataset):
                     ref_size_residual_label = size_residuals[i]
         else:
             num_bbox = 1
-            point_votes = np.zeros([self.num_points, 9])  # make 3 votes identical
-            point_votes_mask = np.zeros(self.num_points)
             point_obj_mask = np.zeros(self.num_points)
             point_instance_label = np.zeros(self.num_points) - 1
 
         target_bboxes_semcls = np.zeros((MAX_NUM_OBJ))
         try:
-            # TODO: in the Group-Free they use -1 instead of -2 !!!
+            # TODO: in the Group-Free they use -1 instead of -2 !?!
             target_bboxes_semcls[0:num_bbox] = [DC.nyu40id2class[int(x)] for x in instance_bboxes[:, -2][0:num_bbox]]
         except KeyError:
             pass
@@ -249,15 +222,10 @@ class ScannetReferenceDataset(Dataset):
         data_dict["box_label_mask"] = target_bboxes_mask.astype(np.float32)  # (MAX_NUM_OBJ) as 0/1 with 1 indicating a unique box
         data_dict["pcl_color"] = pcl_color
 
-        # detection votenet
-        data_dict["vote_label"] = point_votes.astype(np.float32)
-        data_dict["vote_label_mask"] = point_votes_mask.astype(np.int64)
-
         # detection group free transformer
         data_dict["size_gts"] = size_gts.astype(np.float32)
         data_dict['point_obj_mask'] = point_obj_mask.astype(np.int64)  # (N,) with 0/1 with 1 for point is in object BB.
-        # (N,) with int values in -1,0,...,num_box-1, indicating which object the point belongs to, -1 means a background point.
-        data_dict['point_instance_label'] = point_instance_label.astype(np.int64)
+        data_dict['point_instance_label'] = point_instance_label.astype(np.int64)# (N,) with int values in -1,0,...,num_box-1, indicating which object the point belongs to, -1 means a background point.
 
         # refer
         data_dict["object_id"] = np.array(int(object_id)).astype(np.int64)
@@ -306,7 +274,6 @@ class ScannetReferenceDataset(Dataset):
             scene_id = data["scene_id"]
             object_id = data["object_id"]
             object_name = " ".join(data["object_name"].split("_"))
-            ann_id = data["ann_id"]
 
             if scene_id not in all_sem_labels:
                 all_sem_labels[scene_id] = []
@@ -402,15 +369,11 @@ class ScannetReferenceDataset(Dataset):
         for scene_id in self.scene_list:
             self.scene_data[scene_id] = {}
             # self.scene_data[scene_id]["mesh_vertices"] = np.load(os.path.join(CONF.PATH.SCANNET_DATA, scene_id)+"_vert.npy")
-            self.scene_data[scene_id]["mesh_vertices"] = np.load(
-                os.path.join(CONF.PATH.SCANNET_DATA, scene_id) + "_aligned_vert.npy")  # axis-aligned
-            self.scene_data[scene_id]["instance_labels"] = np.load(
-                os.path.join(CONF.PATH.SCANNET_DATA, scene_id) + "_ins_label.npy")
-            self.scene_data[scene_id]["semantic_labels"] = np.load(
-                os.path.join(CONF.PATH.SCANNET_DATA, scene_id) + "_sem_label.npy")
+            self.scene_data[scene_id]["mesh_vertices"] = np.load(os.path.join(CONF.PATH.SCANNET_DATA, scene_id) + "_aligned_vert.npy")  # axis-aligned
+            self.scene_data[scene_id]["instance_labels"] = np.load(os.path.join(CONF.PATH.SCANNET_DATA, scene_id) + "_ins_label.npy")
+            self.scene_data[scene_id]["semantic_labels"] = np.load(os.path.join(CONF.PATH.SCANNET_DATA, scene_id) + "_sem_label.npy")
             # self.scene_data[scene_id]["instance_bboxes"] = np.load(os.path.join(CONF.PATH.SCANNET_DATA, scene_id)+"_bbox.npy")
-            self.scene_data[scene_id]["instance_bboxes"] = np.load(
-                os.path.join(CONF.PATH.SCANNET_DATA, scene_id) + "_aligned_bbox.npy")
+            self.scene_data[scene_id]["instance_bboxes"] = np.load(os.path.join(CONF.PATH.SCANNET_DATA, scene_id) + "_aligned_bbox.npy")
 
         # prepare class mapping
         lines = [line.rstrip() for line in open(SCANNET_V2_TSV)]

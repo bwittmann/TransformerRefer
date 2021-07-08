@@ -1,4 +1,3 @@
-
 import torch
 from torch.autograd import Function
 
@@ -246,8 +245,8 @@ class ProjectionHelper():
         # create two vectors for all considered points that establish 3d to 2d correspondence
         ind_update = ind_points[valid_ind_mask]
         ind_update = ind_update[depth_mask]
-        indices_3d = ind_update.new(num_points + 1).fill_(0) # needs to be same size for all in batch... (first element has size)
-        indices_2d = ind_update.new(num_points + 1).fill_(0) # needs to be same size for all in batch... (first element has size)
+        indices_3d = ind_update.new(num_points + 1).fill_(0)  # needs to be same size for all in batch... (first element has size)
+        indices_2d = ind_update.new(num_points + 1).fill_(0)  # needs to be same size for all in batch... (first element has size)
         indices_3d[0] = ind_update.shape[0]  # first entry: number of relevant entries (of points)
         indices_2d[0] = ind_update.shape[0]
         indices_3d[1:1 + indices_3d[0]] = ind_update  # indices of points
@@ -267,7 +266,7 @@ class ProjectionHelper():
         :return: array of points in sample with projected features (shape: (num_input_channels, num_points))
         """
         
-        num_label_ft = 1 if len(label.shape) == 2 else label.shape[0] # = num_input_channels
+        num_label_ft = 1 if len(label.shape) == 2 else label.shape[0]  # = num_input_channels
 
         output = label.new(num_label_ft, num_points).fill_(0)
         num_ind = lin_indices_3d[0]

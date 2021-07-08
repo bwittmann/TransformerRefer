@@ -10,11 +10,11 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from copy import deepcopy
 
-sys.path.append(os.path.join(os.getcwd())) # HACK add the root folder
+sys.path.append(os.path.join(os.getcwd()))  # HACK add the root folder
 from lib.config import CONF
 from lib.dataset import ScannetReferenceDataset
 from lib.ap_helper import APCalculator, parse_predictions, parse_groundtruths
-from lib.loss_helper_detector import get_loss_detector
+from lib.loss_helper import get_loss
 from lib.eval_helper import get_eval
 from models.refnetV2 import RefNetV2
 from data.scannet.model_util_scannet import ScannetDatasetConfig
@@ -22,7 +22,8 @@ from data.scannet.model_util_scannet import ScannetDatasetConfig
 SCANREFER_TRAIN = json.load(open(os.path.join(CONF.PATH.DATA, "ScanRefer_filtered_train.json")))
 SCANREFER_VAL = json.load(open(os.path.join(CONF.PATH.DATA, "ScanRefer_filtered_val.json")))
 
-def get_dataloader(args, scanrefer, all_scene_list, split, config):
+
+def get_dataloader(args, scanrefer, all_scene_list, split):
     dataset = ScannetReferenceDataset(
         scanrefer=scanrefer, 
         scanrefer_all_scene=all_scene_list, 
@@ -34,32 +35,29 @@ def get_dataloader(args, scanrefer, all_scene_list, split, config):
         use_multiview=args.use_multiview
     )
     print("evaluate on {} samples".format(len(dataset)))
-
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
-
     return dataset, dataloader
 
+
 def get_model(args, config):
-    # load model
+    # create model
     input_channels = int(args.use_multiview) * 128 + int(args.use_normal) * 3 + int(args.use_color) * 3 + int(not args.no_height)
-
     detector_args = {
-        'width' : args.width,
-        'bn_momentum' : args.bn_momentum,
-        'sync_bn' : args.sync_bn,
-        'dropout' : args.dropout,
-        'activation' : args.activation,
-        'nhead' : args.nhead,
-        'num_decoder_layers' : args.num_decoder_layers,
-        'dim_feedforward' : args.dim_feedforward,
-        'cross_position_embedding' : args.cross_position_embedding,
-        'size_cls_agnostic' : args.size_cls_agnostic,
-        'num_proposals' : args.num_proposals,
-        'sampling' : args.sampling,
-        'self_position_embedding' : args.self_position_embedding,
-        'num_features' : args.num_features
+        'width': args.width,
+        'bn_momentum': args.bn_momentum,
+        'sync_bn': args.sync_bn,
+        'dropout': args.dropout,
+        'activation': args.activation,
+        'nhead': args.nhead,
+        'num_decoder_layers': args.num_decoder_layers,
+        'dim_feedforward': args.dim_feedforward,
+        'cross_position_embedding': args.cross_position_embedding,
+        'size_cls_agnostic': args.size_cls_agnostic,
+        'num_proposals': args.num_proposals,
+        'sampling': args.sampling,
+        'self_position_embedding': args.self_position_embedding,
+        'num_features': args.num_features
     }
-
     model = RefNetV2(
         num_class=config.num_class,
         num_heading_bin=config.num_heading_bin,
@@ -72,19 +70,21 @@ def get_model(args, config):
         emb_size=args.emb_size,
         use_multi_ref_gt=args.use_multi_ref_gt
     ).cuda()
-    
-    model_name = "model_last.pth" if args.detection else "model.pth"
+
+    # load model
+    model_name = "model.pth"
     path = os.path.join(CONF.PATH.OUTPUT, args.folder, model_name)
     model.load_state_dict(torch.load(path), strict=False)
-    
-    model.eval()
 
+    # put model in eval mode
+    model.eval()
     return model
+
 
 def get_scannet_scene_list(split):
     scene_list = sorted([line.rstrip() for line in open(os.path.join(CONF.PATH.SCANNET_META, "scannetv2_{}.txt".format(split)))])
-
     return scene_list
+
 
 def get_scanrefer(args):
     if args.detection:
@@ -99,10 +99,9 @@ def get_scanrefer(args):
         scene_list = sorted(list(set([data["scene_id"] for data in scanrefer])))
         if args.num_scenes != -1:
             scene_list = scene_list[:args.num_scenes]
-
         scanrefer = [data for data in scanrefer if data["scene_id"] in scene_list]
-
     return scanrefer, scene_list
+
 
 def eval_ref(args):
     print("evaluate localization...")
@@ -114,7 +113,7 @@ def eval_ref(args):
     scanrefer, scene_list = get_scanrefer(args)
 
     # dataloader
-    _, dataloader = get_dataloader(args, scanrefer, scene_list, "val", DC)
+    _, dataloader = get_dataloader(args, scanrefer, scene_list, "val")
 
     # model
     model = get_model(args, DC)
@@ -166,7 +165,8 @@ def eval_ref(args):
                 # feed
                 data = model(data)
 
-                _, data = get_loss_detector(
+                # loss
+                _, data = get_loss(
                     end_points=data, 
                     config=DC,
                     num_decoder_layers=6,
@@ -176,7 +176,8 @@ def eval_ref(args):
                     use_votenet_objectness=args.use_votenet_objectness,
                     use_multi_ref_gt=args.use_multi_ref_gt
                 )
-  
+
+                # eval
                 data = get_eval(
                     data_dict=data, 
                     config=DC,
@@ -380,6 +381,7 @@ def eval_ref(args):
 
     print("\nlanguage classification accuracy: {}".format(np.mean(lang_acc)))
 
+
 def eval_det(args):
     print("evaluate detection...")
     # constant
@@ -390,7 +392,7 @@ def eval_det(args):
     scanrefer, scene_list = get_scanrefer(args)
 
     # dataloader
-    _, dataloader = get_dataloader(args, scanrefer, scene_list, "val", DC)
+    _, dataloader = get_dataloader(args, scanrefer, scene_list, "val")
 
     # model
     model = get_model(args, DC)
@@ -418,7 +420,7 @@ def eval_det(args):
         with torch.no_grad():
             data = model(data)
 
-            _, data = get_loss_detector(
+            _, data = get_loss(
                 end_points=data,
                 config=DC,
                 num_decoder_layers=6,
@@ -448,10 +450,11 @@ def eval_det(args):
     print("\nobject detection sem_acc: {}".format(np.mean(sem_acc)))
     for i, ap_calculator in enumerate(AP_CALCULATOR_LIST):
         print()
-        print("-"*10, "iou_thresh: %f"%(AP_IOU_THRESHOLDS[i]), "-"*10)
+        print("-"*10, "iou_thresh: %f" % (AP_IOU_THRESHOLDS[i]), "-"*10)
         metrics_dict = ap_calculator.compute_metrics()
         for key in metrics_dict:
             print("eval %s: %f"%(key, metrics_dict[key]))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -480,7 +483,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_votenet_objectness", action="store_true", help="Use VoteNet's objectness labeling with transformer object detection")
     parser.add_argument("--use_multi_ref_gt", action="store_true", help="use multiple reference ground truths")
     
-    # detector related arguments
+    # detector
     parser.add_argument("--num_proposals", type=int, default=256, help="proposal number")
     parser.add_argument("--width", type=int, default=1, help="PointNet backbone width ratio")
     parser.add_argument("--bn_momentum", type=float, default=0.1, help="batchnorm momentum")
@@ -490,14 +493,11 @@ if __name__ == "__main__":
     parser.add_argument("--nhead", type=int, default=8, help="parallel attention heads in multihead attention")
     parser.add_argument("--num_decoder_layers", type=int, default=6, help="number of decoder layers")
     parser.add_argument("--dim_feedforward", type=int, default=2048, help="hidden size of the linear layers in the decoder")
-    parser.add_argument("--cross_position_embedding", type=str, default='xyz_learned', choices=["none", "xyz_learned"], 
-                        help="position embedding for cross-attention")
-    parser.add_argument("--self_position_embedding", type=str, default='loc_learned', choices=["none", "xyz_learned", "loc_learned"], 
-                        help="position embedding for self-attention")
+    parser.add_argument("--cross_position_embedding", type=str, default='xyz_learned', choices=["none", "xyz_learned"], help="position embedding for cross-attention")
+    parser.add_argument("--self_position_embedding", type=str, default='loc_learned', choices=["none", "xyz_learned", "loc_learned"], help="position embedding for self-attention")
     parser.add_argument("--size_cls_agnostic", action="store_true", help="use class agnostic predict heads")
     parser.add_argument("--sampling", type=str, default="kps", help="initial object candidate sampling")
     parser.add_argument("--num_features", type=int, default=288, help="number of features of the object proposals")
-    
     
     args = parser.parse_args()
 
@@ -506,6 +506,7 @@ if __name__ == "__main__":
     os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
     # evaluate
-    if args.reference: eval_ref(args)
-    if args.detection: eval_det(args)
-
+    if args.reference:
+        eval_ref(args)
+    if args.detection:
+        eval_det(args)

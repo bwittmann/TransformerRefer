@@ -9,8 +9,7 @@ sys.path.append(BASE_DIR)
 
 from models.backbone_module import Pointnet2Backbone
 from models.transformer import TransformerDecoderLayer
-from models.modules import PointsObjClsModule, FPSModule, GeneralSamplingModule, PositionEmbeddingLearned, PredictHead, \
-    ClsAgnosticPredictHead
+from models.modules import PointsObjClsModule, FPSModule, GeneralSamplingModule, PositionEmbeddingLearned, PredictHead, ClsAgnosticPredictHead
 
 
 class GroupFreeDetector(nn.Module):
@@ -33,11 +32,24 @@ class GroupFreeDetector(nn.Module):
         sampling: (default: kps)
             Initial object candidate sampling method
     """
-
-    def __init__(self, num_class, num_heading_bin, num_size_cluster, mean_size_arr,
-                 input_feature_dim=0, width=1, bn_momentum=0.1, sync_bn=False, num_proposal=128, sampling='kps',
-                 dropout=0.1, activation="relu", nhead=8, num_decoder_layers=6, dim_feedforward=2048,
-                 self_position_embedding='loc_learned', cross_position_embedding='xyz_learned', num_features=288,
+    def __init__(self, num_class,
+                 num_heading_bin,
+                 num_size_cluster,
+                 mean_size_arr,
+                 input_feature_dim=0,
+                 width=1,
+                 bn_momentum=0.1,
+                 sync_bn=False,
+                 num_proposal=128,
+                 sampling='kps',
+                 dropout=0.1,
+                 activation="relu",
+                 nhead=8,
+                 num_decoder_layers=6,
+                 dim_feedforward=2048,
+                 self_position_embedding='loc_learned',
+                 cross_position_embedding='xyz_learned',
+                 num_features=288,
                  size_cls_agnostic=False):
         super().__init__()
 
@@ -62,6 +74,7 @@ class GroupFreeDetector(nn.Module):
         # Backbone point feature learning
         self.backbone_net = Pointnet2Backbone(input_feature_dim=self.input_feature_dim, width=self.width)
 
+        # Sampling
         if self.sampling == 'fps':
             self.fps_module = FPSModule(num_proposal)
         elif self.sampling == 'kps':
@@ -69,12 +82,12 @@ class GroupFreeDetector(nn.Module):
             self.gsample_module = GeneralSamplingModule()
         else:
             raise NotImplementedError
+
         # Proposal
         if self.size_cls_agnostic:
             self.proposal_head = ClsAgnosticPredictHead(num_class, num_heading_bin, num_proposal, num_features)
         else:
-            self.proposal_head = PredictHead(num_class, num_heading_bin, num_size_cluster,
-                                             mean_size_arr, num_proposal, num_features)
+            self.proposal_head = PredictHead(num_class, num_heading_bin, num_size_cluster, mean_size_arr, num_proposal, num_features)
         if self.num_decoder_layers <= 0:
             # stop building if has no decoder layer
             return
@@ -85,24 +98,24 @@ class GroupFreeDetector(nn.Module):
 
         # Position Embedding for Self-Attention
         if self.self_position_embedding == 'none':
-            self.decoder_self_posembeds = [None for i in range(num_decoder_layers)]
+            self.decoder_self_posembeds = [None for _ in range(num_decoder_layers)]
         elif self.self_position_embedding == 'xyz_learned':
             self.decoder_self_posembeds = nn.ModuleList()
-            for i in range(self.num_decoder_layers):
+            for _ in range(self.num_decoder_layers):
                 self.decoder_self_posembeds.append(PositionEmbeddingLearned(3, num_features))
         elif self.self_position_embedding == 'loc_learned':
             self.decoder_self_posembeds = nn.ModuleList()
-            for i in range(self.num_decoder_layers):
+            for _ in range(self.num_decoder_layers):
                 self.decoder_self_posembeds.append(PositionEmbeddingLearned(6, num_features))
         else:
             raise NotImplementedError(f"self_position_embedding not supported {self.self_position_embedding}")
 
         # Position Embedding for Cross-Attention
         if self.cross_position_embedding == 'none':
-            self.decoder_cross_posembeds = [None for i in range(num_decoder_layers)]
+            self.decoder_cross_posembeds = [None for _ in range(num_decoder_layers)]
         elif self.cross_position_embedding == 'xyz_learned':
             self.decoder_cross_posembeds = nn.ModuleList()
-            for i in range(self.num_decoder_layers):
+            for _ in range(self.num_decoder_layers):
                 self.decoder_cross_posembeds.append(PositionEmbeddingLearned(3, num_features))
         else:
             raise NotImplementedError(f"cross_position_embedding not supported {self.cross_position_embedding}")
@@ -115,16 +128,16 @@ class GroupFreeDetector(nn.Module):
                     num_features, nhead, dim_feedforward, dropout, activation,
                     self_posembed=self.decoder_self_posembeds[i],
                     cross_posembed=self.decoder_cross_posembeds[i],
-                ))
+                )
+            )
 
         # Prediction Head
         self.prediction_heads = nn.ModuleList()
-        for i in range(self.num_decoder_layers):
+        for _ in range(self.num_decoder_layers):
             if self.size_cls_agnostic:
                 self.prediction_heads.append(ClsAgnosticPredictHead(num_class, num_heading_bin, num_proposal, num_features))
             else:
-                self.prediction_heads.append(PredictHead(num_class, num_heading_bin, num_size_cluster,
-                                                         mean_size_arr, num_proposal, num_features))
+                self.prediction_heads.append(PredictHead(num_class, num_heading_bin, num_size_cluster, mean_size_arr, num_proposal, num_features))
 
         # Init
         self.init_weights()
@@ -147,9 +160,7 @@ class GroupFreeDetector(nn.Module):
         Returns:
             end_points: dict
         """
-        end_points = {}
-
-        end_points = self.backbone_net(inputs)
+        end_points = self.backbone_net(inputs)  # dict
 
         # Query Points Generation
         points_xyz = end_points['fp2_xyz']
@@ -182,10 +193,7 @@ class GroupFreeDetector(nn.Module):
             raise NotImplementedError
 
         # Proposal
-        proposal_center, proposal_size = self.proposal_head(cluster_feature,
-                                                            base_xyz=cluster_xyz,
-                                                            end_points=end_points,
-                                                            prefix='proposal_')  # N num_proposal 3
+        proposal_center, proposal_size = self.proposal_head(cluster_feature, base_xyz=cluster_xyz, end_points=end_points, prefix='proposal_')  # N num_proposal 3
 
         base_xyz = proposal_center.detach().clone()
         base_size = proposal_size.detach().clone()
@@ -194,6 +202,7 @@ class GroupFreeDetector(nn.Module):
         if self.num_decoder_layers > 0:
             query = self.decoder_query_proj(cluster_feature)
             key = self.decoder_key_proj(points_features) if self.decoder_key_proj is not None else None
+
         # Position Embedding for Cross-Attention
         if self.cross_position_embedding == 'none':
             key_pos = None
@@ -219,10 +228,7 @@ class GroupFreeDetector(nn.Module):
             query = self.decoder[i](query, key, query_pos, key_pos)
 
             # Prediction
-            base_xyz, base_size = self.prediction_heads[i](query,
-                                                           base_xyz=cluster_xyz,
-                                                           end_points=end_points,
-                                                           prefix=prefix)
+            base_xyz, base_size = self.prediction_heads[i](query, base_xyz=cluster_xyz, end_points=end_points, prefix=prefix)
 
             base_xyz = base_xyz.detach().clone()
             base_size = base_size.detach().clone()

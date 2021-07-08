@@ -17,6 +17,14 @@
     Ref: https://raw.githubusercontent.com/rbgirshick/py-faster-rcnn/master/lib/datasets/voc_eval.py
 """
 import numpy as np
+from utils.box_util import box3d_iou
+import os
+# import sys
+from utils.metric_util import calc_iou  # axis-aligned 3D box IoU
+from multiprocessing import Pool
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 def voc_ap(rec, prec, use_07_metric=False):
     """ ap = voc_ap(rec, prec, [use_07_metric])
@@ -51,25 +59,23 @@ def voc_ap(rec, prec, use_07_metric=False):
         ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
     return ap
 
-import os
-import sys
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-from utils.metric_util import calc_iou # axis-aligned 3D box IoU
+
 def get_iou(bb1, bb2):
     """ Compute IoU of two bounding boxes.
         ** Define your bod IoU function HERE **
     """
-    #pass
     iou3d = calc_iou(bb1, bb2)
     return iou3d
 
-from utils.box_util import box3d_iou
-def get_iou_obb(bb1,bb2):
-    iou3d = box3d_iou(bb1,bb2)
+
+def get_iou_obb(bb1, bb2):
+    iou3d = box3d_iou(bb1, bb2)
     return iou3d
+
 
 def get_iou_main(get_iou_func, args):
     return get_iou_func(*args)
+
 
 def eval_det_cls(pred, gt, ovthresh=0.25, use_07_metric=False, get_iou_func=get_iou):
     """ Generic functions to compute precision/recall for object detection
@@ -86,7 +92,7 @@ def eval_det_cls(pred, gt, ovthresh=0.25, use_07_metric=False, get_iou_func=get_
     """
 
     # construct gt objects
-    class_recs = {} # {img_id: {'bbox': bbox list, 'det': matched list}}
+    class_recs = {}  # {img_id: {'bbox': bbox list, 'det': matched list}}
     npos = 0
     for img_id in gt.keys():
         bbox = np.array(gt[img_id])
@@ -103,12 +109,12 @@ def eval_det_cls(pred, gt, ovthresh=0.25, use_07_metric=False, get_iou_func=get_
     confidence = []
     BB = []
     for img_id in pred.keys():
-        for box,score in pred[img_id]:
+        for box, score in pred[img_id]:
             image_ids.append(img_id)
             confidence.append(score)
             BB.append(box)
     confidence = np.array(confidence)
-    BB = np.array(BB) # (nd,4 or 8,3 or 6)
+    BB = np.array(BB)  # (nd,4 or 8,3 or 6)
 
     # sort by confidence
     sorted_ind = np.argsort(-confidence)
@@ -121,21 +127,21 @@ def eval_det_cls(pred, gt, ovthresh=0.25, use_07_metric=False, get_iou_func=get_
     tp = np.zeros(nd)
     fp = np.zeros(nd)
     for d in range(nd):
-        #if d%100==0: print(d)
+        # if d%100==0: print(d)
         R = class_recs[image_ids[d]]
-        bb = BB[d,...].astype(float)
+        bb = BB[d, ...].astype(float)
         ovmax = -np.inf
         BBGT = R['bbox'].astype(float)
 
         if BBGT.size > 0:
             # compute overlaps
             for j in range(BBGT.shape[0]):
-                iou = get_iou_main(get_iou_func, (bb, BBGT[j,...]))
+                iou = get_iou_main(get_iou_func, (bb, BBGT[j, ...]))
                 if iou > ovmax:
                     ovmax = iou
                     jmax = j
 
-        #print d, ovmax
+        # print d, ovmax
         if ovmax > ovthresh:
             if not R['det'][jmax]:
                 tp[d] = 1.
@@ -149,7 +155,7 @@ def eval_det_cls(pred, gt, ovthresh=0.25, use_07_metric=False, get_iou_func=get_
     fp = np.cumsum(fp)
     tp = np.cumsum(tp)
     rec = tp / float(npos + 1e-8)
-    #print('NPOS: ', npos)
+    # print('NPOS: ', npos)
     # avoid divide by zero in case the first detection matches a difficult
     # ground truth
     prec = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
@@ -157,10 +163,12 @@ def eval_det_cls(pred, gt, ovthresh=0.25, use_07_metric=False, get_iou_func=get_
 
     return rec, prec, ap
 
+
 def eval_det_cls_wrapper(arguments):
     pred, gt, ovthresh, use_07_metric, get_iou_func = arguments
     rec, prec, ap = eval_det_cls(pred, gt, ovthresh, use_07_metric, get_iou_func)
-    return (rec, prec, ap)
+    return rec, prec, ap
+
 
 def eval_det(pred_all, gt_all, ovthresh=0.25, use_07_metric=False, get_iou_func=get_iou):
     """ Generic functions to compute precision/recall for object detection
@@ -175,20 +183,23 @@ def eval_det(pred_all, gt_all, ovthresh=0.25, use_07_metric=False, get_iou_func=
             prec: {classname: prec_all}
             ap: {classname: scalar}
     """
-    pred = {} # map {classname: pred}
-    gt = {} # map {classname: gt}
+    pred = {}  # map {classname: pred}
+    gt = {}  # map {classname: gt}
     for img_id in pred_all.keys():
         for classname, bbox, score in pred_all[img_id]:
-            if classname not in pred: pred[classname] = {}
+            if classname not in pred:
+                pred[classname] = {}
             if img_id not in pred[classname]:
                 pred[classname][img_id] = []
-            if classname not in gt: gt[classname] = {}
+            if classname not in gt:
+                gt[classname] = {}
             if img_id not in gt[classname]:
                 gt[classname][img_id] = []
-            pred[classname][img_id].append((bbox,score))
+            pred[classname][img_id].append((bbox, score))
     for img_id in gt_all.keys():
         for classname, bbox in gt_all[img_id]:
-            if classname not in gt: gt[classname] = {}
+            if classname not in gt:
+                gt[classname] = {}
             if img_id not in gt[classname]:
                 gt[classname][img_id] = []
             gt[classname][img_id].append(bbox)
@@ -203,7 +214,7 @@ def eval_det(pred_all, gt_all, ovthresh=0.25, use_07_metric=False, get_iou_func=
     
     return rec, prec, ap 
 
-from multiprocessing import Pool
+
 def eval_det_multiprocessing(pred_all, gt_all, ovthresh=0.25, use_07_metric=False, get_iou_func=get_iou):
     """ Generic functions to compute precision/recall for object detection
         for multiple classes.
@@ -217,20 +228,23 @@ def eval_det_multiprocessing(pred_all, gt_all, ovthresh=0.25, use_07_metric=Fals
             prec: {classname: prec_all}
             ap: {classname: scalar}
     """
-    pred = {} # map {classname: pred}
-    gt = {} # map {classname: gt}
+    pred = {}  # map {classname: pred}
+    gt = {}  # map {classname: gt}
     for img_id in pred_all.keys():
         for classname, bbox, score in pred_all[img_id]:
-            if classname not in pred: pred[classname] = {}
+            if classname not in pred:
+                pred[classname] = {}
             if img_id not in pred[classname]:
                 pred[classname][img_id] = []
-            if classname not in gt: gt[classname] = {}
+            if classname not in gt:
+                gt[classname] = {}
             if img_id not in gt[classname]:
                 gt[classname][img_id] = []
-            pred[classname][img_id].append((bbox,score))
+            pred[classname][img_id].append((bbox, score))
     for img_id in gt_all.keys():
         for classname, bbox in gt_all[img_id]:
-            if classname not in gt: gt[classname] = {}
+            if classname not in gt:
+                gt[classname] = {}
             if img_id not in gt[classname]:
                 gt[classname][img_id] = []
             gt[classname][img_id].append(bbox)
