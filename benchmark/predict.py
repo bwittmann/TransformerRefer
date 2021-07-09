@@ -207,7 +207,7 @@ if __name__ == "__main__":
     parser.add_argument("--folder", type=str, help="Folder containing the model")
     parser.add_argument("--gpu", type=str, help="gpu", default="0")
     parser.add_argument("--batch_size", type=int, help="batch size", default=8)
-    parser.add_argument("--num_points", type=int, default=40000, help="Point Number [default: 40000]")
+    parser.add_argument("--num_points", type=int, default=50000, help="Point Number [default: 50000]")
     parser.add_argument("--num_proposals", type=int, default=256, help="Proposal number [default: 256]")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
     parser.add_argument("--no_height", action="store_true", help="Do NOT use height signal in input.")
