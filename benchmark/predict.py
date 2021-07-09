@@ -137,7 +137,7 @@ def predict(args):
             size_cls_agnostic=args.size_cls_agnostic,
             use_votenet_objectness=args.use_votenet_objectness,
             use_multi_ref_gt=args.use_multi_ref_gt,
-            detection=False,
+            detection=True,
             reference=True
         )
 
