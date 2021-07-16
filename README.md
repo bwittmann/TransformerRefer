@@ -32,8 +32,7 @@ For additional input features, select appropriate flags (and remove `--no_height
 To use the language classification proxy loss just remove the `--no_lang_cls` flag, and 
 to use our proposed *multi-ref* loss or the VoteNet objectness just set the corresponding flag:
 
-    --use_multi_ref_gt
-    --use_votenet_objectness
+    --use_multi_ref_gt --use_votenet_objectness
     
 #### Pre-trained detector
 
