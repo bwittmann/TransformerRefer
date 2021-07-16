@@ -169,7 +169,7 @@ def eval_ref(args):
                 _, data = get_loss(
                     end_points=data, 
                     config=DC,
-                    num_decoder_layers=6,
+                    num_decoder_layers=args.num_decoder_layers,
                     detection=True,
                     reference=True,
                     use_lang_classifier=not args.no_lang_cls,
@@ -423,7 +423,7 @@ def eval_det(args):
             _, data = get_loss(
                 end_points=data,
                 config=DC,
-                num_decoder_layers=6,
+                num_decoder_layers=args.num_decoder_layers,
                 detection=True,
                 reference=False,
                 use_lang_classifier=not args.no_lang_cls,
