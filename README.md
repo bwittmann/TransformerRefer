@@ -1,4 +1,4 @@
-# RefNetV2 - 3D visual grounding using a transformer-based object detector
+# RefNetV2
 
 In this project, the ScanRefer baseline architecture is modified to take advantage of an improved object detection.
 The overall aim is to improve the results for the visual grounding task.
