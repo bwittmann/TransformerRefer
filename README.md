@@ -29,13 +29,11 @@ For additional input features, select appropriate flags (and remove `--no_height
 
     --use_color --use_normal --use_multiview
 
-To use the language classification proxy loss:
-
-    --use_lang_cls
-
-To use our proposed *multi-ref* loss:
+To use the language classification proxy loss just remove the `--no_lang_cls` flag, and 
+to use our proposed *multi-ref* loss or the VoteNet objectness just set the corresponding flag:
 
     --use_multi_ref_gt
+    --use_votenet_objectness
     
 #### Pre-trained detector
 
