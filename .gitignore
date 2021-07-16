@@ -24,6 +24,7 @@ lib/pointnet2/dist/
 lib/pointnet2/pointnet2.egg-info/
 
 # others
+docs
 lib/config.py
 !outputs
 outputs/*
