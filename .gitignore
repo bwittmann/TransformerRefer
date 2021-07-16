@@ -27,8 +27,9 @@ lib/pointnet2/pointnet2.egg-info/
 lib/config.py
 !outputs
 outputs/*
-!outputs/GFDetector
-!outputs/ScanRefer
+#!outputs/GFDetector
+#!outputs/ScanRefer
+#!outputs/RefNetV2
 eval_dump
 demo
 LICENSE
