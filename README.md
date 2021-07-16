@@ -51,7 +51,8 @@ To use your own pre-trained detection module as weight initialization for visual
 ### Visualization
 
 Use the following arguments for the `visualize.py` script 
-(+ all the arguments required to load the model, e.g. `--num_decoder_layers 12` for the 12 layer detector):
+(+ all the arguments required to load the model, e.g. `--no_height` for models that don't use
+the hight as input or `--num_decoder_layers 12` for the 12 layer detector):
 
     python scripts/visualize.py --folder <path to model> --scene_id <id from val set> 
 

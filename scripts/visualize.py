@@ -20,7 +20,7 @@ from lib.eval_helper import get_eval
 from lib.config import CONF
 
 # data
-SCANNET_ROOT = "C:/Users/philo/adl4cv/TransformerScanRefer/data/scannet/scans"  # TODO point this to your scannet data
+SCANNET_ROOT = CONF.PATH.SCANNET_SCANS  # TODO change if necessary
 SCANNET_MESH = os.path.join(SCANNET_ROOT, "{}/{}_vh_clean_2.ply")  # scene_id, scene_id
 SCANNET_META = os.path.join(SCANNET_ROOT, "{}/{}.txt")  # scene_id, scene_id
 SCANREFER_TRAIN = json.load(open(os.path.join(CONF.PATH.DATA, "ScanRefer_filtered_train.json")))
