@@ -1,35 +1,50 @@
 # RefNetV2
 
 In this project, the ScanRefer baseline architecture is modified to take advantage of an improved object detection.
-The overall aim is to improve the results for the visual grounding task.
+The overall aim is to improve the results for the visual grounding task. Our proposed architecture is depicted here:
 
-For a detailed description of this project, please refer to the report and the presentations.
+![RefNETV2](docs/refnetv2_architecture.png "The RefNetV2 architecture")
+
+For a detailed description of this project, please refer to the report and the presentations in the 
+[`docs`](docs/) directory.
 
 ## Usage
 
 ### training
 
-Object detector with 6 transformer decoder blocks:
+The basic settings we used to train the models described in the [final report](docs/final_report.pdf)
+are shown below (we used pre-trained detection modules as mentioned further below).
 
-    python scripts/train.py --no_lang_cls --batch_size 10 --lr_scheduler plateau --augment --val_step 3000
+`L6`:Object detector with 6 transformer decoder blocks:
 
-Object detector with 12 transformer decoder blocks and a double width backbone:
+    python scripts/train.py --no_lang_cls --no_height --batch_size 10 --lr_scheduler plateau \
+                            --augment --val_step 3000
 
-    python scripts/train.py --no_lang_cls --batch_size 5 --lr_scheduler plateau --augment --val_step 3000 --num_decoder_layers 12 --width 2
+`L12, wx2`: Object detector with 12 transformer decoder blocks and a double width backbone:
 
-It is strongly adviced to use a pre-trained weight initialization for the transformer-based object detector:
+    python scripts/train.py --no_lang_cls --no_height --batch_size 5 --lr_scheduler plateau \
+                            --augment --val_step 3000 --num_decoder_layers 12 --width 2
+
+It is strongly advised to use a pre-trained weight initialization for the transformer-based object detector.
+You can use the provided weights in [Group-Free 3D Object Detection via Transformers](https://github.com/zeliu98/Group-Free-3D#scannet-v2) via:
 
     --use_pretrained_transformer <path to model>
+    
+Or you can pre-train your own detection module with our code using the `--no_reference` flag. 
+The detector will then be trained on the entire ScanNet training data for detection.
+To then use your own pre-trained detection model use:
 
-For additional input features, select appropriate flags:
+    --use_pretrained_det <folder name in outputs>
 
-    --use_color --use_normal --use_multiview --no_height
+For additional input features, select appropriate flags (and remove `--no_height` to include height values):
 
-Language classification proxy loss:
+    --use_color --use_normal --use_multiview
+
+To use the language classification proxy loss:
 
     --use_lang_cls
 
-Multi-ref loss:
+To use our proposed *multi-ref* loss:
 
     --use_multi_ref_gt
 
@@ -41,21 +56,25 @@ Multi-ref loss:
 
 Please contact bastian.wittmann@tum.de or philipp.foth@tum.de in order to receive pre-trained models.
 
-#### REFNETV2_6L_XYZ: 6 transformer decoder blocks, input: XYZ-coordinates
+`REFNETV2_6L_XYZ`: 6 transformer decoder blocks, input: XYZ-coordinates
 
-    python scripts/eval.py --folder <path to model> --reference --no_height --no_lang_cls --no_nms --force --repeat 5
+    python scripts/eval.py --folder <path to model> --reference --no_height --no_lang_cls \
+                           --no_nms --force --repeat 5
 
-#### REFNETV2_6L_XYZ_H_N_RGB: 6 transformer decoder blocks, input: XYZ-coordinates, height, normals, RGB
+`REFNETV2_6L_XYZ_H_N_RGB`: 6 transformer decoder blocks, input: XYZ-coordinates, height, normals, RGB
 
-    python scripts/eval.py --folder <path to model> --reference --use_color --use_normal --no_lang_cls --no_nms --force --repeat 5
+    python scripts/eval.py --folder <path to model> --reference --use_color --use_normal \
+                           --no_lang_cls --no_nms --force --repeat 5
 
-#### REFNETV2_6L_XYZ_H_N_M: 6 transformer decoder blocks, input: XYZ-coordinates, height, normals, multiview features
+`REFNETV2_6L_XYZ_H_N_M`: 6 transformer decoder blocks, input: XYZ-coordinates, height, normals, multiview features
 
-    python scripts/eval.py --folder <path to model> --reference --use_multiview --use_normal --no_lang_cls --no_nms --force --repeat 5
+    python scripts/eval.py --folder <path to model> --reference --use_multiview --use_normal \
+                           --no_lang_cls --no_nms --force --repeat 5
 
-#### REFNETV2_12L_W2_XYZ: 12 transformer decoder blocks and double backbone with, input: XYZ-coordinates
+`REFNETV2_12L_W2_XYZ`: 12 transformer decoder blocks and double backbone with, input: XYZ-coordinates
 
-    python scripts/eval.py --folder <path to model> --reference --no_height --no_lang_cls --no_nms --force --repeat 5 --num_decoder_layers 12 --width 2
+    python scripts/eval.py --folder <path to model> --reference --no_height --no_lang_cls \
+                           --no_nms --force --repeat 5 --num_decoder_layers 12 --width 2
 
 
 ### further information
@@ -66,9 +85,9 @@ Please contact bastian.wittmann@tum.de or philipp.foth@tum.de in order to receiv
 
 ## Dataset
 
-To setup and preparate the data, please refer to the <a href="https://github.com/daveredrum/ScanRefer" target="_blank">ScanRefer</a> repository.
+To setup and preparate the data, please refer to the <a href="https://github.com/daveredrum/ScanRefer#dataset" target="_blank">ScanRefer</a> repository.
 
-## Citation
+## References
 
 The project and source code is based on the  <a href="https://github.com/daveredrum/ScanRefer" target="_blank">ScanRefer</a>  and the  <a href="https://github.com/zeliu98/Group-Free-3D" target="_blank">Group-Free-3D</a> project.
 
