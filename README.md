@@ -54,7 +54,8 @@ Use the following arguments for the `visualize.py` script
 (+ all the arguments required to load the model, e.g. `--no_height` for models that don't use
 the hight as input or `--num_decoder_layers 12` for the 12 layer detector):
 
-    python scripts/visualize.py --folder <path to model> --scene_id <id from val set> 
+    python scripts/visualize.py --folder <path to model> --scene_id <id from val set> \
+                                --batch_size 2
 
 ### Evaluation of our models
 
@@ -63,23 +64,24 @@ Please contact bastian.wittmann@tum.de or philipp.foth@tum.de in order to receiv
 `REFNETV2_6L_XYZ` - 6 transformer decoder blocks, input: XYZ-coordinates:
 
     python scripts/eval.py --folder <path to model> --reference --no_height --no_lang_cls \
-                           --no_nms --force --repeat 5
+                           --no_nms --force --repeat 5 --batch_size 6
 
 `REFNETV2_6L_XYZ_H_N_RGB` - 6 transformer decoder blocks, input: XYZ-coordinates, height, normals, RGB:
 
     python scripts/eval.py --folder <path to model> --reference --use_color --use_normal \
-                           --no_lang_cls --no_nms --force --repeat 5
+                           --no_lang_cls --no_nms --force --repeat 5 --batch_size 6
 
 `REFNETV2_6L_XYZ_H_N_M` - 6 transformer decoder blocks, input: XYZ-coordinates, height, normals, 
 multiview features:
 
     python scripts/eval.py --folder <path to model> --reference --use_multiview --use_normal \
-                           --no_lang_cls --no_nms --force --repeat 5
+                           --no_lang_cls --no_nms --force --repeat 5 --batch_size 6
 
 `REFNETV2_12L_W2_XYZ` - 12 transformer decoder blocks and double backbone with, input: XYZ-coordinates:
 
     python scripts/eval.py --folder <path to model> --reference --no_height --no_lang_cls \
-                           --no_nms --force --repeat 5 --num_decoder_layers 12 --width 2
+                           --no_nms --force --repeat 5 --num_decoder_layers 12 --width 2 \
+                            --batch_size 3
 
 
 ### Further information and arguments
