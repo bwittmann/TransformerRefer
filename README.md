@@ -1,12 +1,18 @@
 # RefNetV2
 
-In this project, the ScanRefer baseline architecture is modified to take advantage of an improved object detection.
-The overall aim is to improve the results for the visual grounding task. Our proposed architecture is depicted here:
+In this project, the ScanRefer baseline architecture is modified to take advantage of an improved transformer-inspired object detection.
+Our proposed architecture is depicted in the visualization below.
 
 ![RefNETV2](docs/refnetv2_architecture.png "The RefNetV2 architecture")
 
-For a detailed description of this project, please refer to the report and the presentations in the 
+The overall aim of this project is to improve the results of the visual grounding task, which aims to localize an object in a 3D point cloud representation of a 
+scene based on a natural language description.
+For a detailed description of this project, please refer to the report, the poster, and the presentations in the 
 [`docs`](docs/) directory.
+
+To demonstrate the performance of our approach, some results are presented below.
+
+![Results](docs/results.png "Qualitative results of our approach compared to the ScanRefer baseline and ground truth")
 
 ## Usage
 
